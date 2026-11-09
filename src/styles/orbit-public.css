@@ -1,0 +1,45 @@
+/* Shared cinematic materials for the public website and authentication. */
+:root .orbit-public {
+  --public-ground:#F4F7FF;
+  --public-title:#252D48;
+  --public-copy:#4D5C7A;
+  --public-action:#354778;
+  --public-on-action:#FFFFFF;
+  --public-atmosphere:radial-gradient(ellipse 80% 110% at -8% 75%,#D5EDFFB3,transparent 68%),radial-gradient(ellipse 73% 95% at 107% 16%,#D5CEFF99,transparent 76%),linear-gradient(145deg,#F4F7FF,#EAF1FF 57%,#EAE4FF);
+  --public-shade:radial-gradient(ellipse 58% 48% at 42% 35%,#F4F7FF77,transparent 90%);
+  --public-fade:linear-gradient(0deg,#EAF1FF,transparent 40%);
+  --public-control:rgba(255,255,255,.62);
+  --public-control-edge:rgba(255,255,255,.85);
+  --public-control-ink:#35405E;
+  --public-feature:linear-gradient(125deg,#DCE3FF,#D5EDFF 75%,#EAE4FF);
+  --public-lavender:linear-gradient(125deg,#F0EEFF,#EAE4FF 70%,#E3EBFF);
+  --public-highlight:rgba(255,255,255,.9);
+  --public-shadow:0 20px 55px -32px #50699F44;
+  --public-menu:#F4F7FF;
+}
+:root[data-theme="dark"] .orbit-public {
+  --public-ground:#101725;
+  --public-title:#F5F4FA;
+  --public-copy:#CDD4E5;
+  --public-action:#DCE3FF;
+  --public-on-action:#202B46;
+  --public-atmosphere:radial-gradient(ellipse 80% 110% at -8% 75%,rgba(158,102,70,.25),transparent 68%),radial-gradient(ellipse 73% 95% at 107% 16%,rgba(130,146,207,.19),transparent 76%),linear-gradient(145deg,#121B2C,#101725 57%,#18233B);
+  --public-shade:radial-gradient(ellipse 58% 48% at 42% 35%,rgba(11,18,32,.56),transparent 90%);
+  --public-fade:linear-gradient(0deg,#101828,transparent 40%);
+  --public-control:rgba(30,41,61,.66);
+  --public-control-edge:rgba(218,228,255,.16);
+  --public-control-ink:#F2F5FF;
+  --public-feature:linear-gradient(125deg,#2B3855,#24364D 75%,#33364F);
+  --public-lavender:linear-gradient(125deg,#2C304D,#33334E 70%,#28364D);
+  --public-highlight:rgba(221,231,255,.14);
+  --public-shadow:0 20px 55px -32px #050C1C88;
+  --public-menu:#19243A;
+}
+.orbit-public .glass-monogram { width:100%;height:100%;fill:none;stroke:none;overflow:visible; }
+:root:not([data-theme="dark"]) .orbit-public #landing-cin-face stop { stop-color:#8DACE5; }
+:root:not([data-theme="dark"]) .orbit-public #landing-cin-rim stop { stop-color:#FFFFFF;stop-opacity:.95; }
+:root:not([data-theme="dark"]) .orbit-public #landing-cin-rim stop:nth-child(3) { stop-color:#91A3D2;stop-opacity:.65; }
+:root:not([data-theme="dark"]) .orbit-public #landing-cin-shadow feDropShadow { flood-color:#6D84B5;flood-opacity:.18; }
+.orbit-public :focus-visible { outline:3px solid var(--color-focus);outline-offset:4px; }
+.orbit-public button, .orbit-public a { -webkit-tap-highlight-color:transparent; }
+@media(prefers-reduced-motion:reduce) { .orbit-public *, .orbit-public *::before, .orbit-public *::after { animation:none!important;transition:none!important;scroll-behavior:auto!important; } }

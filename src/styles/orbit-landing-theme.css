@@ -1,0 +1,93 @@
+/* Theme adaptation of the approved compositions; no authenticated selectors. */
+:root .orbit-landing { --bg:var(--color-canvas);--ink:var(--color-text);--muted:var(--color-text-secondary);--action:var(--color-primary);--line:var(--color-border);--glass:var(--glass-surface);--glass-edge:var(--glass-border);--blue:var(--color-chart-blue);--chart-lavender:var(--color-chart-lavender);background:var(--ambient-background),var(--bg);overflow-x:clip; }
+:root .orbit-landing .section-heading { display:block; }
+:root .orbit-landing .brand-mark { background:none;border:0;padding:0;border-radius:0; }
+:root .orbit-landing .section, :root .orbit-landing .closing { scroll-margin-top:0; }
+:root .orbit-landing .hero.hero-cinematic { --bg:var(--public-ground);--ink:var(--public-title);--muted:var(--public-copy);--action:var(--public-action);background:var(--public-ground); }
+:root .orbit-landing .cinema-background { background:var(--public-atmosphere); }
+:root .orbit-landing .cinema-background::after { background:var(--public-fade); }
+:root .orbit-landing .cinema-shade { background:var(--public-shade); }
+:root .orbit-landing .hero-cinematic h1 { color:var(--public-title); }
+:root .orbit-landing .cinema-copy > p { color:var(--public-copy); }
+:root .orbit-landing .hero-cinematic .btn--primary { background:var(--public-action);color:var(--public-on-action); }
+:root .orbit-landing .hero-cinematic .btn--secondary { --ink:var(--public-title);--bg:var(--public-ground);background:var(--public-control);color:var(--public-title);border-color:var(--public-control-edge); }
+:root .orbit-landing .nav .nav-bar { background:var(--glass-surface);color:var(--ink);border-color:var(--glass-border);box-shadow:var(--glass-shadow); }
+:root .orbit-landing .nav .nav-start { color:var(--color-on-primary);background:var(--color-primary); }
+:root .orbit-landing .nav[data-tone="hero"] .nav-bar { background:transparent;box-shadow:none;color:var(--public-title); }
+:root .orbit-landing .nav[data-tone="hero"] .nav-actions { background:var(--public-control);border-color:var(--public-control-edge); }
+:root .orbit-landing .nav[data-tone="hero"] .nav-start { background:var(--public-action);color:var(--public-on-action); }
+:root .orbit-landing .nav[data-tone="hero"] .motion-control { color:var(--public-copy); }
+:root .orbit-landing .nav[data-tone="hero"] .menu-button span { background:var(--public-title); }
+:root .orbit-landing .landing-theme-toggle { width:34px;height:36px;display:grid;place-items:center;border:0;border-radius:50%;background:transparent;color:inherit;flex-shrink:0;transition:background .2s; }
+:root .orbit-landing .landing-theme-toggle svg { width:18px;height:18px; }
+:root .orbit-landing .landing-theme-toggle:hover { background:var(--glass-hover); }
+:root .orbit-landing .landing-explore { display:inline-flex;align-items:center;gap:7px;min-height:44px;font-size:13px;font-weight:500;white-space:nowrap;text-underline-offset:5px; }
+:root .orbit-landing .landing-explore svg { width:14px;height:14px;transform:rotate(90deg); }
+:root .orbit-landing .landing-explore:hover { text-decoration:underline; }
+:root .orbit-landing .landing-lighting-control { min-height:44px;padding:0;border:0;background:transparent;color:var(--muted);font-size:12px;text-align:left;text-underline-offset:4px; }
+:root .orbit-landing .landing-lighting-control:not(:disabled):hover { text-decoration:underline; }
+:root .orbit-landing .heading-row > p, :root .orbit-landing .loan-copy > p:not(.section-label), :root .orbit-landing .ledger-label, :root .orbit-landing .ledger-meta { color:var(--ink-soft); }
+:root .orbit-landing .accounts-section { background:radial-gradient(ellipse 1200px 700px at 50% 48%,var(--glass-hover),transparent 85%); }
+:root .orbit-landing .currency-ledger { border-color:var(--glass-border);box-shadow:inset 0 1px 0 var(--public-highlight),var(--public-shadow); }
+:root .orbit-landing .ledger-kes, :root .orbit-landing .goal-showcase { background:var(--public-feature); }
+:root .orbit-landing .ledger-usd { background:var(--public-lavender); }
+:root .orbit-landing .currency-tag { background:var(--glass-surface);border-color:var(--glass-border); }
+:root .orbit-landing .ledger-divider { background:var(--glass-border); }
+:root .orbit-landing .glass { background:var(--glass-surface);border-color:var(--glass-border);box-shadow:var(--glass-shadow); }
+:root .orbit-landing .account-row { border-color:var(--line); }
+:root .orbit-landing .account-icon { background:var(--color-elevated);color:var(--color-focus); }
+:root .orbit-landing .account-row .account-icon { background:var(--color-elevated);color:var(--color-focus); }
+:root .orbit-landing .currency-switch { background:var(--color-elevated);border-color:var(--line); }
+:root .orbit-landing .currency-switch button { color:var(--muted); }
+:root .orbit-landing .currency-switch button[aria-pressed="true"] { background:var(--color-surface);color:var(--ink); }
+:root .orbit-landing .currency-switch.mini { background:var(--ui-bg);border-color:var(--ui-line); }
+:root .orbit-landing .mini button { color:var(--ui-muted); }
+:root .orbit-landing .mini button[aria-pressed="true"] { background:var(--ui-surface);color:var(--ui-ink); }
+:root .orbit-landing .spending-section { --bg:var(--color-mist);--ink:var(--color-text);--muted:var(--color-text-secondary);--action:var(--color-primary);--line:var(--color-border);background:var(--bg); }
+:root .orbit-landing .spending-section .heading-row > p { color:var(--ink-soft); }
+:root .orbit-landing .category-row, :root .orbit-landing .trace-transaction { border-color:var(--line); }
+:root .orbit-landing .category-row:hover, :root .orbit-landing .category-row:focus-visible { background:var(--glass-hover); }
+:root .orbit-landing .currency-switch.dark { background:var(--color-elevated);border-color:var(--line); }
+:root .orbit-landing .currency-switch.dark button { color:var(--muted); }
+:root .orbit-landing .currency-switch.dark button[aria-pressed="true"] { background:var(--color-primary);color:var(--color-on-primary); }
+:root .orbit-landing .goal-showcase, :root .orbit-landing .budget-showcase, :root .orbit-landing .loan-agreement { border-color:var(--glass-border);box-shadow:inset 0 1px 0 var(--public-highlight),var(--public-shadow); }
+:root .orbit-landing .budget-showcase, :root .orbit-landing .loan-agreement { background:var(--surface-content); }
+:root .orbit-landing .goal-top, :root .orbit-landing .goal-figure > span, :root .orbit-landing .goal-progress, :root .orbit-landing .budget-top, :root .orbit-landing .budget-showcase > p, :root .orbit-landing .budget-labels, :root .orbit-landing .budget-note { color:var(--ink-soft); }
+:root .orbit-landing .goal-icon, :root .orbit-landing .loan-mini-mark { background:var(--glass-surface);border-color:var(--glass-border);color:var(--color-focus); }
+:root .orbit-landing .goal-track, :root .orbit-landing .budget-track { background:var(--color-elevated); }
+:root .orbit-landing .goal-track > span, :root .orbit-landing .budget-track > span { background:var(--color-chart-blue); }
+:root .orbit-landing .initial, :root .orbit-landing .status-chip { background:var(--color-elevated);color:var(--ink-soft);border-color:var(--line); }
+:root .orbit-landing .agreement-terms { background:var(--color-canvas); }
+:root .orbit-landing .loan-orbit-line { border-color:var(--glass-border); }
+:root .orbit-landing .loans-section { background:radial-gradient(ellipse 1000px 750px at 78% 50%,var(--glass-hover),transparent 85%),var(--color-canvas); }
+:root .orbit-landing .goal-sculpture { border-color:var(--glass-inset);box-shadow:inset 2px 2px 0 var(--public-highlight),var(--public-shadow); }
+:root .orbit-landing .goal-sculpture::after { border-color:var(--glass-border); }
+:root .orbit-landing .closing { --bg:var(--color-mist);--ink:var(--color-text);--muted:var(--color-text-secondary);--action:var(--color-primary);background:radial-gradient(ellipse 1100px 750px at 85% 15%,var(--glass-hover),transparent 90%),var(--bg); }
+:root .orbit-landing .closing .btn--primary { color:var(--color-on-primary); }
+:root .orbit-landing .footer-links { color:var(--ink-soft); }
+:root .orbit-landing .footer-bottom { border-color:var(--line); }
+:root .orbit-landing #landing-menu { background:var(--public-menu);color:var(--ink);overflow-y:auto; }
+:root .orbit-landing .mobile-menu-head button { background:var(--glass-surface); }
+:root .orbit-landing .landing-menu-settings { display:flex;align-items:center;gap:10px;margin-top:25px;font-size:13px;color:var(--muted); }
+:root .orbit-landing[data-ambient-paused="true"] .glass-reflection { animation-play-state:paused; }
+:root .orbit-landing.has-motion .reveal { transition:opacity .7s var(--ease),transform .7s var(--ease); }
+:root .orbit-landing.has-motion .reveal:not(.is-visible) { opacity:0;transform:translateY(12px); }
+:root .orbit-landing .nav__links a { position:relative; }
+:root .orbit-landing .nav__links a::after { content:"";position:absolute;bottom:5px;left:0;right:0;height:1px;background:currentColor;transform:scaleX(0);transform-origin:left;transition:transform .2s; }
+:root .orbit-landing .nav__links a:hover::after { transform:scaleX(1); }
+:root:not([data-theme="dark"]) .orbit-landing .hero-cinematic h1 { text-shadow:0 2px 25px #FFFFFF33; }
+:root:not([data-theme="dark"]) .orbit-landing .hero-cinematic .hero-product { border-color:#FFFFFFCC;box-shadow:0 -1px 0 #FFFFFFCC,0 25px 55px -30px #6D84B566,0 0 0 7px #FFFFFF33; }
+:root[data-theme="dark"] .orbit-landing .hero-product { --ui-muted:#B1BED8; }
+:root[data-theme="dark"] .orbit-landing .plans-section { background:var(--ambient-background); }
+@media(max-width:767px) { :root .orbit-landing .landing-explore { display:none; } }
+@media(max-width:639px) {
+ :root .orbit-landing .landing-lighting-control { display:none; }
+ :root .orbit-landing .nav[data-tone="hero"] .nav-actions { gap:0; }
+ :root .orbit-landing .nav-actions { gap:2px; }
+ :root .orbit-landing .landing-theme-toggle { width:32px; }
+ :root .orbit-landing .hero-cinematic .cinema-copy { padding-top:158px; }
+ :root .orbit-landing .hero-cinematic .cinema-copy > p { color:var(--public-copy); }
+}
+@media(prefers-reduced-motion:reduce) { :root .orbit-landing.has-motion .reveal:not(.is-visible) { opacity:1;transform:none; } }
+@media(prefers-reduced-transparency:reduce) { :root .orbit-landing .nav .nav-actions,:root .orbit-landing .hero-cinematic .btn--secondary,:root .orbit-landing .glass { background:var(--public-menu);backdrop-filter:none; } }
+@supports not (backdrop-filter:blur(1px)) { :root .orbit-landing .nav .nav-actions,:root .orbit-landing .hero-cinematic .btn--secondary,:root .orbit-landing .glass { background:var(--public-menu); } }

@@ -1,0 +1,220 @@
+/* Orbit's shared authenticated material system. Layout stays in index.css.
+   Existing component aliases keep financial workflows and public auth styling intact. */
+:root { --auth-canvas:#F4F7FF; }
+:root[data-theme="dark"] { --auth-canvas:#121827; }
+:root .app-shell, :root .orbit-loading-screen, :root .orbit-landing, :root .orbit-auth, :root .orbit-legal, :root .orbit-billing {
+  --sidebar-width:208px;
+  --color-canvas:var(--auth-canvas);
+  --color-mist:#EAF1FF;
+  --color-periwinkle:#DCE3FF;
+  --color-lavender:#EAE4FF;
+  --color-ice:#D5EDFF;
+  --color-surface:#FFFFFF;
+  --color-elevated:#EDF2FC;
+  --color-text:#252D48;
+  --color-text-soft:#4D5C7A;
+  --color-text-secondary:#64718C;
+  --color-border:#DFE6F3;
+  --color-control-border:#BCC9E0;
+  --color-primary:#354778;
+  --color-primary-hover:#293B69;
+  --color-on-primary:#FFFFFF;
+  --color-accent:#BFCBFF;
+  --color-focus:#4868A8;
+  --color-positive:#366657;
+  --color-negative:#93495B;
+  --color-success-bg:#EBF4F1;
+  --color-error-bg:#FBEDF1;
+  --color-error-ink:#813E50;
+  --color-warning-bg:#F5F1E8;
+  --color-warning-ink:#71603A;
+  --color-danger-fill:#9D475D;
+  --color-danger-hover:#843C50;
+  --color-danger-label:#FFFFFF;
+  --color-chart-blue:#7198DE;
+  --color-chart-lavender:#A89EE4;
+  --color-chart-aqua:#73C6D2;
+  --color-chart-secondary:#B8C8ED;
+  --glass-surface:rgba(255,255,255,.68);
+  --glass-border:rgba(255,255,255,.82);
+  --glass-nav:rgba(255,255,255,.38);
+  --glass-highlight:rgba(255,255,255,.85);
+  --glass-inset:rgba(255,255,255,.38);
+  --glass-hover:rgba(255,255,255,.58);
+  --glass-blur:20px;
+  --surface-content:rgba(255,255,255,.97);
+  --surface-nav-active:rgba(255,255,255,.78);
+  --surface-hover-color:#F1F5FD;
+  --surface-field:#FFFFFF;
+  --surface-field-disabled:#EEF2FA;
+  --surface-feature-solid:#E5EBFF;
+  --surface-plan-solid:#EBF4FF;
+  --surface-dialog:#FFFFFF;
+  --surface-tooltip:#354778;
+  --tooltip-text:#FFFFFF;
+  --overlay-scrim:rgba(30,43,72,.32);
+  --surface-shadow:0 8px 26px -17px rgba(77,112,170,.19),0 2px 7px -4px rgba(76,101,153,.1);
+  --glass-shadow:inset 0 1px 0 var(--glass-highlight),0 16px 40px -26px rgba(77,112,170,.29);
+  --control-shadow:inset 0 1px 0 var(--glass-highlight),0 6px 16px -11px rgba(77,112,170,.24);
+  --dialog-shadow:0 20px 65px -24px rgba(37,57,100,.26);
+  --ambient-background:radial-gradient(ellipse 950px 700px at 16% 7%,rgba(213,237,255,.62),transparent 78%),radial-gradient(ellipse 900px 650px at 86% 5%,rgba(234,228,255,.65),transparent 80%),radial-gradient(ellipse 1100px 800px at 64% 100%,rgba(213,237,255,.52),transparent 82%); /* taste-skill-ignore: user-approved luminous Orbit material direction. */
+  --balance-background:linear-gradient(120deg,rgba(220,227,255,.76),rgba(213,237,255,.64) 52%,rgba(234,228,255,.70)); /* taste-skill-ignore: user-approved luminous Orbit material direction. */
+  --plan-background:linear-gradient(145deg,rgba(234,241,255,.46),rgba(213,237,255,.32)); /* taste-skill-ignore: user-approved luminous Orbit material direction. */
+  --motion-fast:180ms;
+  --motion-standard:240ms;
+  --radius-surface:26px;
+  --radius-input:12px;
+
+  /* Semantic aliases used by existing forms, tables and dialogs. */
+  --ground:var(--color-canvas); --surface:var(--color-surface); --surface-raised:var(--color-elevated);
+  --paper:var(--surface-content); --paper-alt:var(--color-elevated);
+  --ink:var(--color-text); --ink-soft:var(--color-text-soft); --muted:var(--color-text-secondary); --subtle:var(--color-text-secondary);
+  --border:var(--color-border); --line:var(--color-border); --border-control:var(--color-control-border); --focus:var(--color-focus);
+  --green:var(--color-primary); --green-dark:var(--color-primary-hover); --green-soft:var(--color-elevated); --on-primary:var(--color-on-primary);
+  --positive:var(--color-positive); --negative:var(--color-negative); --danger:var(--color-negative);
+  --success-bg:var(--color-success-bg); --success-ink:var(--color-positive); --error-bg:var(--color-error-bg); --error-ink:var(--color-error-ink);
+  --surface-muted:var(--color-elevated); --surface-hover:var(--surface-hover-color); --field-bg:var(--surface-field);
+  --surface-ledger:var(--surface-content); --border-ledger:var(--line); --surface-summary:var(--color-mist); --rule-total:var(--border-control);
+  --chart-ink:var(--color-chart-blue); --chart-track:var(--color-elevated);
+  --orbit-accent:var(--color-accent); --orbit-soft:var(--color-elevated); --orbit-blue:var(--color-focus);
+  --orbit-balance-ink:var(--ink); --orbit-balance-muted:var(--ink-soft); --orbit-balance-divider:var(--line);
+  --orbit-plan-ink:var(--ink); --orbit-plan-muted:var(--muted); --orbit-plan-line:var(--line);
+  --orbit-chart-1:var(--color-chart-blue); --orbit-chart-2:var(--color-chart-lavender); --orbit-chart-3:var(--color-chart-aqua); --orbit-chart-4:var(--color-chart-secondary);
+  --orbit-chart-income:var(--color-chart-blue); --orbit-chart-expense:var(--color-chart-lavender);
+  --orbit-button-bg:var(--color-primary); --orbit-button-ink:var(--color-on-primary); --orbit-glass-edge:var(--glass-border);
+  --orbit-card-bg:var(--surface-content); --orbit-nav-active:var(--surface-nav-active);
+  --orbit-shadow:var(--surface-shadow); --orbit-glass-shadow:var(--glass-shadow);
+  --orbit-balance-fallback:var(--surface-feature-solid); --orbit-plan-fallback:var(--surface-plan-solid);
+
+  color:var(--ink);
+  background-color:var(--ground);
+  background-image:var(--ambient-background);
+  background-attachment:fixed;
+}
+:root[data-theme="dark"] .app-shell, :root[data-theme="dark"] .orbit-loading-screen, :root[data-theme="dark"] .orbit-landing, :root[data-theme="dark"] .orbit-auth, :root[data-theme="dark"] .orbit-legal, :root[data-theme="dark"] .orbit-billing {
+  color-scheme:dark;
+  --color-mist:#1C263A; --color-periwinkle:#ABB9F0; --color-lavender:#A89EE4; --color-ice:#9CCAE8;
+  --color-surface:#1C263A; --color-elevated:#25314A;
+  --color-text:#F2F5FF; --color-text-soft:#CDD6EA; --color-text-secondary:#B1BED8;
+  --color-border:#35425D; --color-control-border:#586B90;
+  --color-primary:#ABB9F0; --color-primary-hover:#C1CCF8; --color-on-primary:#19243B;
+  --color-accent:#ABB9F0; --color-focus:#B9C9FC;
+  --color-positive:#A8D3C5; --color-negative:#F0B2C1;
+  --color-success-bg:#223C3A; --color-error-bg:#3D2C3D; --color-error-ink:#F2C2CF;
+  --color-warning-bg:#393527; --color-warning-ink:#E0CFA4;
+  --color-danger-fill:#AA536B; --color-danger-hover:#BD647D;
+  --color-chart-blue:#8DACED; --color-chart-lavender:#B5AAF0; --color-chart-aqua:#82C9D4; --color-chart-secondary:#697EA9;
+  --glass-surface:rgba(37,49,74,.72); --glass-border:rgba(185,200,255,.16);
+  --glass-nav:rgba(28,38,58,.62); --glass-highlight:rgba(221,231,255,.14); --glass-inset:rgba(221,231,255,.07); --glass-hover:rgba(171,185,240,.1);
+  --surface-content:rgba(30,41,61,.98); --surface-nav-active:rgba(171,185,240,.12); --surface-hover-color:#25314A;
+  --surface-field:#1C263A; --surface-field-disabled:#25314A;
+  --surface-feature-solid:#2B3752; --surface-plan-solid:#24324A; --surface-dialog:#1C263A;
+  --surface-tooltip:#DDE5FF; --tooltip-text:#19243B; --overlay-scrim:rgba(7,13,25,.62);
+  --surface-shadow:inset 0 1px 0 rgba(185,200,255,.045),0 9px 28px -19px rgba(5,12,28,.38);
+  --glass-shadow:inset 0 1px 0 var(--glass-highlight),0 16px 40px -27px rgba(5,12,28,.44);
+  --control-shadow:inset 0 1px 0 var(--glass-highlight),0 6px 16px -11px rgba(5,12,28,.36);
+  --dialog-shadow:0 20px 65px -24px rgba(4,10,24,.48);
+  --ambient-background:radial-gradient(ellipse 950px 700px at 16% 7%,rgba(88,123,191,.15),transparent 78%),radial-gradient(ellipse 900px 650px at 86% 5%,rgba(128,109,194,.13),transparent 80%),radial-gradient(ellipse 1100px 800px at 64% 100%,rgba(76,137,181,.10),transparent 82%); /* taste-skill-ignore: user-approved luminous Orbit material direction. */
+  --balance-background:linear-gradient(120deg,rgba(171,185,240,.13),rgba(113,152,222,.06) 52%,rgba(168,158,228,.09)); /* taste-skill-ignore: user-approved luminous Orbit material direction. */
+  --plan-background:linear-gradient(145deg,rgba(113,152,222,.04),rgba(115,198,210,.035)); /* taste-skill-ignore: user-approved luminous Orbit material direction. */
+}
+
+/* Navigation and floating controls carry the frost; data surfaces stay nearly opaque. */
+:root .app-shell .sidebar { background:var(--glass-nav); border-color:var(--glass-border); -webkit-backdrop-filter:blur(var(--glass-blur));backdrop-filter:blur(var(--glass-blur)); }
+:root .app-shell .topbar { background:var(--glass-surface); border-bottom:1px solid var(--glass-border); -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px); box-shadow:inset 0 -1px 0 var(--glass-inset); }
+:root .app-shell .nav-item-active { background:var(--surface-nav-active); color:var(--ink); box-shadow:inset 0 1px 0 var(--glass-highlight),0 3px 8px -6px rgba(77,112,170,.16); }
+:root .app-shell .nav-item:hover { color:var(--ink); background:var(--surface-nav-active); }
+:root .app-shell .profile-avatar, :root .app-shell .topbar-avatar { background:var(--color-elevated); color:var(--ink-soft); }
+:root .app-shell .page-intro h1, :root .app-shell .field { color:var(--ink); }
+:root .app-shell .eyebrow, :root .app-shell .breadcrumb-slash { color:var(--muted); }
+:root .app-shell ::selection { background:var(--color-periwinkle); color:var(--color-canvas); }
+:root:not([data-theme="dark"]) .app-shell ::selection { color:var(--ink); }
+:root .app-shell .primary-button, :root .app-shell .secondary-button, :root .app-shell .danger-button { min-height:44px; border-radius:22px; }
+:root .app-shell .primary-button { background:var(--color-primary); color:var(--color-on-primary); }
+:root .app-shell .primary-button:hover { background:var(--color-primary-hover); }
+:root .app-shell .secondary-button { color:var(--ink-soft); background:var(--surface-content); border-color:var(--line); }
+:root .app-shell .secondary-button:hover { color:var(--ink); border-color:var(--border-control); background:var(--surface-hover); }
+:root .app-shell .danger-button { color:var(--color-danger-label); background:var(--color-danger-fill); }
+:root .app-shell .danger-button:hover { background:var(--color-danger-hover); }
+:root .app-shell .icon-button { border-radius:var(--radius-input); }
+:root .app-shell .theme-toggle, :root .app-shell .orbit-theme-toggle, :root .app-shell .orbit-dashboard .month-picker { background:var(--glass-surface); border:1px solid var(--glass-border); box-shadow:var(--control-shadow); -webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px); }
+:root .app-shell .theme-toggle { border-radius:50%; }
+.orbit-dashboard .primary-button { box-shadow:0 6px 14px -10px rgba(77,112,170,.33); }
+.orbit-dashboard .primary-button:hover { box-shadow:0 8px 18px -11px rgba(77,112,170,.35); }
+:root .app-shell .orbit-card { border-color:var(--glass-border); }
+:root .app-shell .dashboard-ledger { background-color:var(--glass-surface); background-image:var(--balance-background); border-color:var(--glass-border); -webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px); }
+:root .app-shell .dashboard-plans { background-color:var(--glass-surface); background-image:var(--plan-background); border-color:var(--glass-border); -webkit-backdrop-filter:blur(var(--glass-blur));backdrop-filter:blur(var(--glass-blur)); }
+:root .app-shell .dashboard-currency-code { background:var(--glass-inset); color:var(--ink); }
+:root .app-shell .orbit-round-link::before { background:var(--glass-inset); border-color:var(--glass-border); }
+:root .app-shell .orbit-round-link:hover::before, :root .app-shell .dashboard-plan-links button:hover { background:var(--glass-hover); }
+:root .app-shell .orbit-currency-switch button[aria-pressed="true"] { box-shadow:var(--control-shadow); }
+
+/* Existing resource layouts share the palette, without translucent tables or forms. */
+:root .app-shell .table-wrap { border-radius:20px; background:var(--surface-content); box-shadow:var(--surface-shadow); }
+:root .app-shell .data-table th { color:var(--muted); }
+:root .app-shell .data-table td { color:var(--ink-soft); border-color:var(--line); }
+:root .app-shell .data-table tbody tr:hover { background:var(--surface-hover); }
+:root .app-shell .field input, :root .app-shell .field select, :root .app-shell .field textarea { background:var(--field-bg); border-color:var(--line); border-radius:var(--radius-input); color:var(--ink); outline-color:var(--focus); }
+:root .app-shell .field input:disabled, :root .app-shell .field select:disabled { background:var(--surface-field-disabled); color:var(--muted); }
+:root .app-shell .table-search, :root .app-shell .filter-row select, :root .app-shell .help-search { border-radius:var(--radius-input); background:var(--surface-content); border-color:var(--line); }
+:root .app-shell .modal-backdrop, :root .app-shell .sidebar-overlay { background:var(--overlay-scrim); }
+:root .app-shell .modal-dialog { border:1px solid var(--glass-border); border-radius:24px; background:var(--surface-dialog); box-shadow:var(--dialog-shadow); }
+:root .app-shell .empty-state, :root .app-shell .exchange-panel, :root .app-shell .onboarding-panel { border-radius:22px; background:var(--surface-content); }
+:root .app-shell .empty-mark { background:var(--color-primary); color:var(--color-on-primary); }
+:root .app-shell .settings-section { border-color:var(--line); }
+:root .app-shell .delete-account-section { border-color:var(--color-negative); }
+:root .app-shell .delete-account-section h2 { color:var(--color-negative); }
+:root .app-shell .rate-result { border-color:var(--line); }
+:root .app-shell .form-message-error, :root .app-shell .error-state { background:var(--error-bg); border-color:var(--danger); color:var(--error-ink); }
+:root .app-shell .form-message-success, :root .app-shell .inline-notice { background:var(--success-bg); color:var(--success-ink); }
+:root .app-shell .form-message-info { background:var(--color-elevated); color:var(--ink-soft); }
+:root .app-shell .backend-note { background:var(--color-warning-bg); border-color:var(--color-warning-ink); color:var(--color-warning-ink); }
+:root .app-shell .status { background:var(--color-elevated); color:var(--ink-soft); }
+:root .app-shell .status-active, :root .app-shell .status-income, :root .app-shell .status-target-reached { background:var(--success-bg); color:var(--success-ink); }
+:root .app-shell .status-paused, :root .app-shell .status-partially-paid { background:var(--color-warning-bg); color:var(--color-warning-ink); }
+:root .app-shell .status-cancelled, :root .app-shell .status-expense { background:var(--error-bg); color:var(--error-ink); }
+:root .app-shell .amount-positive { color:var(--positive)!important; }
+:root .app-shell .amount-negative { color:var(--negative)!important; }
+:root .app-shell .goal-progress-track { background:var(--color-elevated); }
+:root .app-shell .goal-progress-track i { background:var(--color-chart-blue); }
+:root .app-shell .legal-page { background:transparent; }
+
+/* Exact values remain visible in the chart and legend. Hover/focus adds detail. */
+.orbit-data-point { position:relative; outline-offset:4px; border-radius:8px; }
+.orbit-data-point:focus-visible { outline:3px solid var(--focus); }
+.orbit-chart-tooltip { position:absolute; z-index:5; left:50%; bottom:calc(100% + 8px); width:max-content; max-width:240px; padding:8px 11px; border-radius:12px; background:var(--surface-tooltip); color:var(--tooltip-text); box-shadow:var(--surface-shadow); font-size:11px; font-weight:500; line-height:1.5; text-align:center; overflow-wrap:anywhere; pointer-events:none; opacity:0; visibility:hidden; transform:translate(-50%,3px); transition:opacity var(--motion-fast) ease,transform var(--motion-fast) ease,visibility var(--motion-fast) ease; }
+.orbit-data-point:hover > .orbit-chart-tooltip, .orbit-data-point:focus-visible > .orbit-chart-tooltip { opacity:1; visibility:visible; transform:translate(-50%,0); }
+.orbit-category-row > .orbit-chart-tooltip { left:auto; right:0; max-width:100%; transform:translateY(3px); }
+.orbit-category-row:hover > .orbit-chart-tooltip, .orbit-category-row:focus-visible > .orbit-chart-tooltip { transform:translateY(0); }
+.orbit-data-point[data-tooltip-dismissed="true"] > .orbit-chart-tooltip, .orbit-category-row[data-active="false"] > .orbit-chart-tooltip { opacity:0; visibility:hidden; }
+.orbit-spending-ring circle { transition:stroke-width var(--motion-fast) ease; }
+.orbit-spending-ring circle[data-active="true"] { stroke-width:20px; }
+.orbit-category-row[data-active="true"] .orbit-category-name { color:var(--ink); }
+:root .app-shell :is(button,input,select,textarea,a,summary) { transition:background-color var(--motion-fast) ease,color var(--motion-fast) ease,border-color var(--motion-fast) ease,box-shadow var(--motion-fast) ease,transform var(--motion-fast) ease; }
+:root .app-shell .orbit-chart-bar { transition:height var(--motion-standard) ease,box-shadow var(--motion-fast) ease; }
+.orbit-flow-column:hover .orbit-chart-bar, .orbit-flow-column:focus-visible .orbit-chart-bar { box-shadow:inset 0 1px 0 var(--glass-highlight); }
+html:has(.app-shell), body:has(.app-shell) { background:var(--auth-canvas); }
+
+@media (max-width:1000px) {
+  :root .app-shell .sidebar { background-color:var(--color-surface); background-image:var(--ambient-background); }
+}
+@media (max-width:560px) {
+  :root .app-shell .table-wrap { background:transparent; box-shadow:none; border-radius:0; }
+  :root .app-shell .data-table tbody tr { background:var(--surface-content); border:1px solid var(--glass-border); border-radius:18px; }
+}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
+  :root .app-shell .sidebar, :root .app-shell .topbar, :root .app-shell .theme-toggle, :root .app-shell .orbit-theme-toggle, :root .app-shell .orbit-dashboard .month-picker { background:var(--color-surface); }
+  :root .app-shell .dashboard-ledger { background:var(--surface-feature-solid); }
+  :root .app-shell .dashboard-plans { background:var(--surface-plan-solid); }
+}
+@media (prefers-reduced-transparency:reduce) {
+  :root .app-shell .sidebar, :root .app-shell .topbar, :root .app-shell .theme-toggle, :root .app-shell .orbit-theme-toggle, :root .app-shell .orbit-dashboard .month-picker { background:var(--color-surface); }
+  :root .app-shell .dashboard-ledger { background:var(--surface-feature-solid); }
+  :root .app-shell .dashboard-plans { background:var(--surface-plan-solid); }
+  :root .app-shell :is(.sidebar,.topbar,.theme-toggle,.orbit-theme-toggle,.orbit-dashboard .month-picker,.dashboard-ledger,.dashboard-plans) { -webkit-backdrop-filter:none;backdrop-filter:none; }
+}
+@media (prefers-reduced-motion:reduce) {
+  :root .app-shell *, :root .app-shell *::before, :root .app-shell *::after { transition:none!important; scroll-behavior:auto!important; }
+  :root .app-shell .primary-button:hover, .orbit-theme-toggle:hover { transform:none; }
+  html:has(.app-shell) { scroll-behavior:auto; }
+}

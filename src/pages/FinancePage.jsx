@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, BadgeDollarSign, CalendarDays, Check, Filter, HandCoins, Leaf, LoaderCircle, Plus, Search, Target, Wallet, X } from "lucide-react";
+import { ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, BadgeDollarSign, CalendarDays, Check, Filter, HandCoins, Leaf, Moon, Plus, Search, Sun, Target, Wallet, X } from "lucide-react";
 import { api, apiBaseUrl, asList, formErrorMessage, jsonBody } from "../lib/api";
+import { focusFormError, nativeValidationMessage, normalizeError } from "../lib/errors";
+import { ErrorNotice, FieldError } from "../components/FormFeedback";
+import GoogleAccountLink from "../components/GoogleAccountLink";
 import HelpPage from "./HelpPage";
+import { DashboardLoading, InlineLoading, LoadingButton, ResourceLoading, SpendingLoading } from "../components/Loading";
 import LegalDraftPage from "./LegalDraftPage";
 
 const endpoints = {
@@ -25,97 +29,177 @@ const metadata = {
   Categories: { title: "Categories", description: "Organise income and spending with categories that fit your life.", singular: "category", icon: Filter },
 };
 
-export default function FinancePage({ screen, initialAction, profile, theme, onThemeChange, onProfileChange, onReopenOnboarding, navigate }) {
-  if (screen === "Overview") return <Dashboard navigate={navigate} profile={profile} />;
+export default function FinancePage({ screen, initialAction, profile, theme, onThemeChange, onProfileChange, onReopenOnboarding, navigate, logoutBusy }) {
+  if (screen === "Overview") return <Dashboard navigate={navigate} profile={profile} theme={theme} onThemeChange={onThemeChange} />;
   if (screen === "Help") return <HelpPage navigate={navigate} onReopenOnboarding={onReopenOnboarding} />;
-  if (screen === "Privacy policy") return <LegalDraftPage path="/privacy-policy" navigate={navigate} />;
-  if (screen === "Terms of service") return <LegalDraftPage path="/terms-of-service" navigate={navigate} />;
+  if (["Privacy policy", "Terms of service", "Legal updates"].includes(screen)) return <LegalDraftPage path={screen === "Privacy policy" ? "/privacy-policy" : screen === "Terms of service" ? "/terms-of-service" : "/legal-updates"} navigate={navigate} theme={theme} onThemeChange={onThemeChange} embedded />;
   if (screen === "Exchange rates") return <ExchangePage />;
-  if (screen === "Settings") return <SettingsPage profile={profile} theme={theme} onThemeChange={onThemeChange} onReopenOnboarding={onReopenOnboarding} onProfileChange={onProfileChange} onLogout={navigate} navigate={navigate} />;
+  if (screen === "Settings") return <SettingsPage logoutBusy={logoutBusy} profile={profile} theme={theme} onThemeChange={onThemeChange} onReopenOnboarding={onReopenOnboarding} onProfileChange={onProfileChange} onLogout={navigate} navigate={navigate} />;
   return <ResourcePage key={screen} screen={screen} initialAction={initialAction} navigate={navigate} />;
 }
 
-function Dashboard({ navigate, profile }) {
+function Dashboard({ navigate, profile, theme, onThemeChange }) {
   const [data, setData] = useState(null);
   const [monthValue, setMonthValue] = useState(() => today().slice(0, 7));
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
+  const [summaryAttempt, setSummaryAttempt] = useState(0);
   const [monthlyTransactions, setMonthlyTransactions] = useState([]);
   const [spendingError, setSpendingError] = useState("");
+  const [loadedSpendingMonth, setLoadedSpendingMonth] = useState("");
+  const [spendingAttempt, setSpendingAttempt] = useState(0);
   const [onboardingData, setOnboardingData] = useState(null);
   const [onboardingHidden, setOnboardingHidden] = useState(() => localStorage.getItem(`budgetly.onboarding.hidden.${profile?.id}`) === "true");
   const [onboardingCompletedBefore] = useState(() => localStorage.getItem(`budgetly.onboarding.complete.${profile?.id}`) === "true");
+  const [onboardingRequested] = useState(() => localStorage.getItem(`budgetly.onboarding.reopen.${profile?.id}`) === "true");
   useEffect(() => {
     if (!profile?.id) return undefined;
     let active = true;
-    Promise.all([api("/api/accounts/"), api("/api/categories/"), api("/api/transactions/")])
-      .then(([accounts, categories, transactions]) => {
+    Promise.all([api("/api/accounts/"), api("/api/transactions/"), api("/api/budgets/")])
+      .then(([accounts, transactions, budgets]) => {
         if (!active) return;
-        const ownedCategories = asList(categories).filter((category) => String(category.user?.id ?? category.user) === String(profile.id));
-        setOnboardingData({ accounts: asList(accounts).length, categories: ownedCategories.length, transactions: asList(transactions).length });
+        setOnboardingData({ accounts: asList(accounts).length, transactions: asList(transactions).length, budgets: asList(budgets).length });
       }).catch(() => { if (active) setOnboardingData(null); });
     return () => { active = false; };
   }, [profile?.id]);
-  const onboardingComplete = Boolean(onboardingData && onboardingData.accounts > 0 && onboardingData.categories > 0 && onboardingData.transactions > 0);
+  const onboardingComplete = Boolean(onboardingData && onboardingData.accounts > 0 && onboardingData.transactions > 0 && onboardingData.budgets > 0);
   useEffect(() => {
     if (!onboardingComplete || !profile?.id) return;
     localStorage.setItem(`budgetly.onboarding.complete.${profile.id}`, "true");
   }, [onboardingComplete, profile?.id]);
-  const load = useCallback(async () => {
-    setBusy(true); setError("");
-    try { setData(await api("/api/dashboard/summary/", { query: { month: monthValue } })); }
-    catch (err) { setError(formErrorMessage(err)); }
-    finally { setBusy(false); }
-  }, [monthValue]);
+  const load = () => { setBusy(true); setError(""); setSummaryAttempt((value) => value + 1); };
   useEffect(() => {
     let active = true;
     api("/api/dashboard/summary/", { query: { month: monthValue } }).then((value) => { if (active) { setData(value); setError(""); } })
-      .catch((err) => { if (active) setError(formErrorMessage(err)); })
+      .catch((err) => { if (active) setError(formErrorMessage(err, { context: "dashboard" })); })
       .finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
-  }, [monthValue]);
+  }, [monthValue, summaryAttempt]);
   useEffect(() => {
     if (!data?.month) return;
     let active = true;
-    api("/api/transactions/", { query: { month: data.month } }).then((value) => { if (active) setMonthlyTransactions(asList(value)); })
-      .catch((err) => { if (active) setSpendingError(formErrorMessage(err)); });
+    api("/api/transactions/", { query: { month: data.month } }).then((value) => { if (active) { setMonthlyTransactions(asList(value)); setSpendingError(""); } })
+      .catch((err) => { if (active) setSpendingError(formErrorMessage(err, { context: "spending" })); })
+      .finally(() => { if (active) setLoadedSpendingMonth(data.month); });
     return () => { active = false; };
-  }, [data?.month]);
+  }, [data?.month, spendingAttempt]);
+  const retrySpending = () => { setLoadedSpendingMonth(""); setSpendingError(""); setSpendingAttempt((value) => value + 1); };
   const balanceEntries = Object.entries(data?.balances || {});
   const currencyEntries = [...new Set([...Object.keys(data?.income || {}), ...Object.keys(data?.expenses || {}), ...Object.keys(data?.cash_flow || {})])];
-  return <div className="page-content">
-    <div className="page-intro"><div><h1>Good day.</h1><p className="muted-text">A current view of the accounts and activity you track.</p></div><div className="overview-actions"><label className="month-picker"><span>Month</span><input type="month" value={monthValue} onChange={(event) => { setBusy(true); setError(""); setMonthValue(event.target.value); }} /></label><button className="primary-button" onClick={() => navigate("/transactions?new=1")}><Plus size={17} />Add transaction</button></div></div>
-    {busy ? <LoadingState label="Loading your overview" /> : error ? <ErrorState error={error} retry={load} /> : !data ? <EmptyState title="Your overview is ready when you are" copy="Add an account and your real totals will appear here." action="Add an account" onClick={() => navigate("/accounts?new=1")} /> : <>
-      {!onboardingHidden && !onboardingCompletedBefore && onboardingData && <GettingStartedChecklist progress={onboardingData} complete={onboardingComplete} onDismiss={() => { localStorage.setItem(`budgetly.onboarding.hidden.${profile.id}`, "true"); setOnboardingHidden(true); }} navigate={navigate} profile={profile} />}
-      <section className="overview-lead" aria-label="Account balances"><div className="overview-lead-copy"><p>Across your active accounts</p>{balanceEntries.length ? <div className="balance-total-list">{balanceEntries.map(([code, amount]) => <strong key={code}>{money(amount, code)}</strong>)}</div> : <strong className="lead-empty">No account balances yet</strong>}<span>Balances are grouped by currency.</span></div><div className="overview-lead-mark"><Wallet size={31} strokeWidth={1.5} /></div></section>
-      <div className="summary-strip"><div className="summary-strip-title"><CalendarDays size={16} /><span>{monthLabel(data.month)}</span></div>{currencyEntries.map((code) => <div className="summary-currency" key={code}><span>{code}</span><div><small>Income</small><strong className="amount-positive">+{money(data.income?.[code], code)}</strong></div><div><small>Expenses</small><strong>−{money(data.expenses?.[code], code)}</strong></div><div><small>Cash flow</small><strong className={Number(data.cash_flow?.[code]) >= 0 ? "amount-positive" : "amount-negative"}>{money(data.cash_flow?.[code], code)}</strong></div></div>)}{!currencyEntries.length && <p className="muted-text">No transactions recorded this month.</p>}</div>
-      <div className="overview-columns"><div className="overview-primary"><SpendingChart transactions={monthlyTransactions} error={spendingError} /><section className="content-section"><div className="section-heading"><div><h2>Recent activity</h2><p>Your latest recorded transactions</p></div><button className="text-button" onClick={() => navigate("/transactions")}>All transactions <ArrowRight size={15} /></button></div>{data.recent_transactions?.length ? <div className="activity-list">{data.recent_transactions.map((item) => <article className="activity-row" key={item.id}><span className={`activity-icon ${item.type}`} aria-hidden="true">{item.type === "income" ? <ArrowDownLeft size={18} /> : <ArrowUpRight size={18} />}</span><span className="activity-copy"><strong>{item.description}</strong><small>{item.category} · {formatDate(item.date)}</small></span><strong className={item.type === "income" ? "amount-positive" : ""}>{item.type === "income" ? "+" : "−"}{money(item.amount, item.currency)}</strong></article>)}</div> : <p className="muted-text">No transactions recorded yet.</p>}</section></div>
-        <aside className="overview-side"><h2>Your money, in view</h2><p>Everything here comes from your Budgetly records. A figure appears once you add the related account or activity.</p><div className="overview-counts"><button onClick={() => navigate("/accounts")}><Wallet size={17} /><span>Active accounts</span><strong>{data.accounts?.total ?? 0}</strong></button><button onClick={() => navigate("/budgets")}><Target size={17} /><span>Active budgets</span><strong>{data.budgets?.active ?? 0}</strong></button><button onClick={() => navigate("/savings")}><Leaf size={17} /><span>Active goals</span><strong>{data.savings?.active_goals ?? 0}</strong></button><button onClick={() => navigate("/loans")}><HandCoins size={17} /><span>Open loans</span><strong>{data.loans?.active ?? 0}</strong></button></div></aside></div>
+  const empty = data && !balanceEntries.length && !currencyEntries.length && !data.recent_transactions?.length;
+  return <div className={`page-content dashboard-page orbit-dashboard ${empty ? "dashboard-page-empty" : ""}`}>
+    <div className="page-intro dashboard-intro">
+      <div><h1>Overview<span className="orbit-heading-dot" aria-hidden="true">.</span></h1><p className="muted-text">A little clarity. A lot more possibility.</p></div>
+      <div className="overview-actions">
+        <button className="orbit-theme-toggle" onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
+        <label className="month-picker"><CalendarDays size={17} aria-hidden="true" /><span className="visually-hidden">Month</span><input type="month" aria-label="Month" value={monthValue} onChange={(event) => { setBusy(true); setError(""); setMonthValue(event.target.value || today().slice(0, 7)); }} /></label>
+        <button className="primary-button" onClick={() => navigate("/transactions?new=1")}><Plus size={17} />Add transaction</button>
+      </div>
+    </div>
+    {!onboardingHidden && (!onboardingCompletedBefore || onboardingRequested) && onboardingData && (!onboardingComplete || onboardingRequested) && <div className="dashboard-setup dashboard-setup-top">
+      <GettingStartedChecklist progress={onboardingData} complete={onboardingComplete} onDismiss={() => { localStorage.setItem(`budgetly.onboarding.hidden.${profile.id}`, "true"); localStorage.removeItem(`budgetly.onboarding.reopen.${profile.id}`); setOnboardingHidden(true); }} navigate={navigate} profile={profile} />
+    </div>}
+    {busy ? <DashboardLoading /> : error ? <ErrorState error={error} retry={load} /> : !data ? <EmptyState title="Your overview is ready when you are" copy="Add an account and your real totals will appear here." action="Add an account" onClick={() => navigate("/accounts?new=1")} /> : <>
+      <div className="orbit-bento">
+        <section className="orbit-card dashboard-ledger" aria-labelledby="balances-title">
+          <div className="dashboard-section-head"><h2 id="balances-title">Account balances</h2><button className="orbit-round-link" aria-label="View accounts" onClick={() => navigate("/accounts")}><ArrowUpRight size={17} /></button></div>
+          {balanceEntries.length ? <dl className="dashboard-balance-list">{balanceEntries.map(([code, amount]) => <div className="dashboard-balance-row" key={code}>
+            <dt><span className="dashboard-currency-code">{code}</span><span>{code === "KES" ? "Kenyan shilling" : code === "USD" ? "US dollar" : code}</span></dt>
+            <dd className={Number(amount) < 0 ? "dashboard-negative" : ""}>{dashboardMoney(amount, code)}</dd>
+          </div>)}</dl> : <div className="dashboard-empty"><p>No account balances yet.</p><button className="text-button" onClick={() => navigate("/accounts?new=1")}>Add an account <ArrowRight size={15} /></button></div>}
+          <button className="orbit-account-count" onClick={() => navigate("/accounts")}>{data.accounts?.total ?? 0} active accounts <ArrowUpRight size={16} /></button>
+        </section>
+
+        <DashboardCashFlow data={data} currencies={currencyEntries} navigate={navigate} />
+        <SpendingChart transactions={monthlyTransactions} error={spendingError} busy={loadedSpendingMonth !== data.month} retry={retrySpending} navigate={navigate} />
+
+        <section className="orbit-card dashboard-activity" aria-labelledby="activity-title">
+          <div className="dashboard-section-head"><h2 id="activity-title">Recent activity</h2><button className="text-button" onClick={() => navigate("/transactions")}>View all <ArrowUpRight size={15} /></button></div>
+          <p className="orbit-card-description">The latest in your money story.</p>
+          {data.recent_transactions?.length ? <ul className="dashboard-activity-list">{data.recent_transactions.map((item) => {
+            const date = dashboardDate(item.date);
+            return <li className="dashboard-activity-row" key={item.id}>
+              <time className="orbit-transaction-date" dateTime={item.date || undefined} aria-label={date.label}><span>{date.day}</span><small>{date.month}</small></time>
+              <div className="dashboard-activity-copy"><strong>{item.description || "Transaction"}</strong><span>{item.category || "Uncategorised"}</span></div>
+              <div className="dashboard-activity-amount"><strong className={item.type === "income" && Number(item.amount) > 0 ? "dashboard-positive" : ""}>{dashboardMoney(item.amount, item.currency, { sign: true, expense: item.type !== "income" })}</strong><span className="visually-hidden">{item.type === "income" ? "Income" : "Expense"}</span></div>
+            </li>;
+          })}</ul> : <div className="dashboard-empty"><p>No transactions recorded yet.</p><button className="text-button" onClick={() => navigate("/transactions?new=1")}>Add transaction <ArrowRight size={15} /></button></div>}
+          <button className="orbit-activity-footer" onClick={() => navigate("/transactions")}>All transactions <ArrowRight size={17} /></button>
+        </section>
+
+        <section className="orbit-card dashboard-plans" aria-labelledby="plans-title">
+          <div className="dashboard-section-head"><h2 id="plans-title">Plans & commitments</h2></div>
+          <p className="orbit-card-description">For the bigger picture.</p>
+          <div className="dashboard-plan-links">
+            <button onClick={() => navigate("/budgets")}><Target size={18} /><span>Active budgets</span><strong>{data.budgets?.active ?? 0}</strong><ArrowUpRight size={15} /></button>
+            <button onClick={() => navigate("/savings")}><Leaf size={18} /><span>Savings goals</span><strong>{data.savings?.active_goals ?? 0}</strong><ArrowUpRight size={15} /></button>
+            <button onClick={() => navigate("/loans")}><HandCoins size={18} /><span>Open loans</span><strong>{data.loans?.active ?? 0}</strong><ArrowUpRight size={15} /></button>
+          </div>
+          <div className="orbit-plans-close"><svg viewBox="0 0 48 32" width="45" height="32" fill="none" stroke="currentColor" strokeWidth=".8" aria-hidden="true"><ellipse cx="24" cy="16" rx="22" ry="8" transform="rotate(-25 24 16)"/><ellipse cx="24" cy="16" rx="22" ry="8" transform="rotate(25 24 16)"/></svg><p>Small steps.<br />Room for what’s next.</p></div>
+        </section>
+      </div>
+      <footer className="orbit-dashboard-footer"><span>Personal finance <span aria-hidden="true">/</span> Budgetly</span><span>{monthLabel(data.month)}</span></footer>
     </>}
   </div>;
 }
 
-function GettingStartedChecklist({ progress, complete, onDismiss, navigate, profile }) {
-  const steps = [
-    { key: "accounts", title: "Add an account", copy: "Choose where your money lives and set its current starting balance.", url: "/accounts?new=1", count: progress.accounts },
-    { key: "categories", title: "Create a category", copy: "Add a personal income or expense category that matches your day-to-day spending.", url: "/categories?new=1", count: progress.categories },
-    { key: "transactions", title: "Record your first transaction", copy: "Log income or an expense against one of your accounts.", url: "/transactions?new=1", count: progress.transactions },
-  ];
-  const finished = steps.filter((step) => step.count > 0).length;
-  return <section className={`getting-started ${complete ? "getting-started-complete" : ""}`} aria-labelledby="getting-started-title">
-    <div className="getting-started-head"><div><span className="guide-progress">{complete ? "Guide complete" : `${finished} of 3 steps saved`}</span><h2 id="getting-started-title">{complete ? `You’re all set${profile?.first_name ? `, ${profile.first_name}` : ""}.` : `Welcome${profile?.first_name ? `, ${profile.first_name}` : ""}.`}</h2><p>{complete ? "Your first account, category and transaction are saved. Your overview will reflect your Budgetly records." : "A few simple steps will make your overview useful. Your progress updates from saved Budgetly data."}</p></div><button type="button" className="icon-button" aria-label="Dismiss getting started guide" onClick={onDismiss}><X size={18} /></button></div>
-    {!complete && <ol className="getting-started-steps">{steps.map((step, index) => <li key={step.key} className={step.count ? "step-complete" : ""}><span className="step-index">{step.count ? <Check size={16} /> : index + 1}</span><div><h3>{step.title}</h3><p>{step.copy}</p></div>{step.count ? <span className="step-status">Saved</span> : <button className="text-button" onClick={() => navigate(step.url)}>Start <ArrowRight size={15} /></button>}</li>)}</ol>}
-    {complete && <button className="secondary-button" onClick={onDismiss}>Continue to overview <ArrowRight size={15} /></button>}
+// Presentation helpers only. Net cash flow and all balances come from the API.
+function dashboardNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function dashboardMoney(value, code, { sign = false, expense = false } = {}) {
+  const number = dashboardNumber(value);
+  if (number === null) return "—";
+  const direction = expense ? -number : number;
+  const prefix = direction < 0 ? "−" : sign && direction > 0 ? "+" : "";
+  return `${prefix}${money(Math.abs(number), code)}`;
+}
+
+function dashboardDate(value) {
+  const date = new Date(value && !value.includes("T") ? `${value}T12:00:00` : value);
+  if (!value || Number.isNaN(date.getTime())) return { day: "—", month: "", label: "Date unavailable" };
+  return { day: new Intl.DateTimeFormat("en", { day: "numeric" }).format(date), month: new Intl.DateTimeFormat("en", { month: "short" }).format(date), label: formatDate(value) };
+}
+
+function DashboardCurrencySwitch({ currencies, value, onChange, label }) {
+  if (!currencies.length) return null;
+  return <div className="orbit-currency-switch" role="group" aria-label={label}>{currencies.map((code) => <button key={code} type="button" onClick={() => onChange(code)} aria-pressed={value === code}>{code}</button>)}</div>;
+}
+
+function DashboardCashFlow({ data, currencies, navigate }) {
+  const [selected, setSelected] = useState("KES");
+  const [dismissedTooltip, setDismissedTooltip] = useState(null);
+  const code = currencies.includes(selected) ? selected : currencies[0];
+  const income = dashboardNumber(data.income?.[code]);
+  const expenses = dashboardNumber(data.expenses?.[code]);
+  const net = dashboardNumber(data.cash_flow?.[code]);
+  const scale = Math.max(Math.abs(income || 0), Math.abs(expenses || 0), 1);
+  return <section className="orbit-card dashboard-month" aria-labelledby="monthly-title">
+    <div className="dashboard-section-head"><h2 id="monthly-title">Monthly cash flow</h2><DashboardCurrencySwitch currencies={currencies} value={code} onChange={setSelected} label="Cash flow currency" /></div>
+    {code ? <>
+      <div className="orbit-cashflow-content">
+        <div className="orbit-flow-summary"><p>Net cash flow · {code}</p><strong className={`orbit-flow-number ${net < 0 ? "dashboard-negative" : ""}`}>{dashboardMoney(data.cash_flow?.[code], code, { sign: true })}</strong><p className="orbit-flow-copy">Your recorded income,{" "}<br />less your expenses.</p></div>
+        <div className="orbit-flow-chart" role="group" aria-label={`${code} monthly income and expenses. Bars show magnitude; signs show direction.`}>
+          {[["Income", income, "income"], ["Expenses", expenses, "expense"]].map(([label, amount, kind]) => <div className="orbit-flow-column orbit-data-point" key={kind} tabIndex={0} role="img" aria-label={label} aria-describedby={`cash-flow-${kind}-detail`} data-tooltip-dismissed={dismissedTooltip === kind} onMouseEnter={() => setDismissedTooltip(null)} onFocus={() => setDismissedTooltip(null)} onKeyDown={(event) => { if (event.key === "Escape") setDismissedTooltip(kind); }}>
+            <span className="orbit-chart-tooltip" role="tooltip" id={`cash-flow-${kind}-detail`}>{label} · {dashboardMoney(amount, code, { expense: kind === "expense" })}</span>
+            <span className="orbit-bar-value">{dashboardMoney(amount, code, { expense: kind === "expense" })}</span>
+            <div className="orbit-bar-well"><div className={`orbit-chart-bar orbit-chart-bar-${kind}`} style={{ "--bar-height": `${Math.abs(amount || 0) / scale * 100}%` }} /></div>
+            <span className="orbit-bar-label">{label}{amount === null && <span className="visually-hidden"> unavailable</span>}</span>
+          </div>)}
+        </div>
+      </div>
+      {(income < 0 || expenses < 0) && <p className="orbit-signed-note">Bars show size; signs show direction.</p>}
+    </> : <div className="dashboard-empty orbit-empty-cashflow"><div className="orbit-empty-ledger" aria-label="No monthly income or expenses recorded"><div><span>Income</span><strong>—</strong></div><div><span>Expenses</span><strong>—</strong></div></div><p>No transactions recorded this month.</p><span className="orbit-empty-copy">Build your monthly picture with a transaction.</span><button className="text-button" onClick={() => navigate("/transactions?new=1")}>Record a transaction <ArrowRight size={15} /></button></div>}
+    <div className="orbit-card-foot"><span>{monthLabel(data.month)}</span><span>Income & expenses, kept in perspective.</span></div>
   </section>;
 }
 
-function monthLabel(value) {
-  if (!value) return "This month";
-  const [year, monthIndex] = value.split("-").map(Number);
-  return new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(new Date(year, monthIndex - 1, 1));
-}
-
-function SpendingChart({ transactions, error }) {
+function SpendingChart({ transactions, error, busy, retry, navigate }) {
+  const [selected, setSelected] = useState("KES");
+  const [activeCategory, setActiveCategory] = useState(null);
   const groups = useMemo(() => {
     const totals = new Map();
     transactions.filter((item) => item.transaction_type === "expense").forEach((item) => {
@@ -127,7 +211,58 @@ function SpendingChart({ transactions, error }) {
     return [...totals.values()].sort((a, b) => a.code.localeCompare(b.code) || b.amount - a.amount);
   }, [transactions]);
   const totals = groups.reduce((result, item) => ({ ...result, [item.code]: (result[item.code] || 0) + item.amount }), {});
-  return <section className="spending-chart-section"><div className="section-heading"><div><h2>Spending by category</h2><p>Share of recorded expenses, grouped by currency</p></div></div>{error ? <p className="muted-text">Category spending could not be loaded. You can still view your transactions.</p> : groups.length ? <div className="spending-chart-list">{groups.map((item) => { const percent = totals[item.code] ? item.amount / totals[item.code] * 100 : 0; return <div className="spending-chart-row" key={`${item.code}-${item.name}`}><div className="spending-chart-top"><span>{item.name} <small>{item.code} · {Math.round(percent)}%</small></span><strong>{money(item.amount, item.code)}</strong></div><div className="spending-chart-track" role="progressbar" aria-label={`${item.name} share of ${item.code} expenses`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(percent)}><i style={{ width: `${percent}%` }} /></div></div>; })}</div> : <p className="muted-text">No expenses recorded this month.</p>}</section>;
+  const currencies = [...new Set(groups.map((item) => item.code))];
+  const code = currencies.includes(selected) ? selected : currencies[0];
+  const parts = groups.filter((item) => item.code === code);
+  const total = totals[code];
+  const canDraw = Number.isFinite(total) && total > 0 && parts.every((item) => Number.isFinite(item.amount) && item.amount >= 0);
+  const circumference = 2 * Math.PI * 66;
+  // Arc geometry is derived from the existing category totals, never a new account balance.
+  let offset = 0;
+  const arcs = canDraw ? parts.map((item, index) => {
+    const length = item.amount / total * circumference;
+    const rounded = length >= 28 && parts.length > 1;
+    const gap = parts.length === 1 ? 0 : rounded ? 20 : Math.min(3, length * .12);
+    const arc = { key: item.name, length: Math.max(0, length - gap), offset, rounded, color: `var(--orbit-chart-${index % 4 + 1})` };
+    offset += length;
+    return arc;
+  }) : [];
+  return <section className="orbit-card dashboard-spending" aria-labelledby="spending-title">
+    <div className="dashboard-section-head"><h2 id="spending-title">Spending mix</h2>{!busy && !error && <DashboardCurrencySwitch currencies={currencies} value={code} onChange={setSelected} label="Spending currency" />}</div>
+    <p className="orbit-card-description">Spending by category</p>
+    {busy ? <SpendingLoading /> : error ? <div className="dashboard-block-notice" role="status"><p>Category spending could not be loaded. You can still view your transactions.</p><button className="text-button orbit-spending-retry" onClick={retry}>Retry category spending <ArrowRight size={15} /></button></div> : parts.length ? <>
+      <div className="orbit-spending-ring" data-currency={code}>
+        <svg viewBox="0 0 168 168" aria-hidden="true"><circle className="orbit-ring-track" cx="84" cy="84" r="66" fill="none" strokeWidth="17" />{arcs.map((arc) => <circle key={arc.key} data-active={activeCategory === arc.key} cx="84" cy="84" r="66" fill="none" stroke={arc.color} strokeWidth="17" strokeDasharray={`${arc.length} ${circumference}`} strokeDashoffset={-arc.offset} strokeLinecap={arc.rounded ? "round" : "butt"} />)}</svg>
+        <div className="orbit-ring-center"><span>{code} expenses</span><strong>{dashboardNumber(total) === null ? "—" : Number(total).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong></div>
+      </div>
+      {!canDraw && <p className="orbit-signed-note">{parts.some((item) => item.amount < 0) ? "Category totals include reversals. Amounts are listed below." : total === 0 ? "No net expenses in this currency." : "Some category amounts are unavailable."}</p>}
+      <ul className="orbit-spending-legend" aria-label={`Expenses by category in ${code}`}>{parts.map((item, index) => <li key={item.name} className="orbit-category-row orbit-data-point" tabIndex={0} data-active={activeCategory === item.name} onMouseEnter={() => setActiveCategory(item.name)} onMouseLeave={() => setActiveCategory(null)} onFocus={() => setActiveCategory(item.name)} onBlur={() => setActiveCategory(null)} onKeyDown={(event) => { if (event.key === "Escape") setActiveCategory(null); }} aria-describedby={`category-${index}-detail`}>
+        <span className="orbit-chart-tooltip" role="tooltip" id={`category-${index}-detail`}>{item.name} · {dashboardMoney(item.amount, code)}{canDraw ? ` · ${Math.round(item.amount / total * 100)}%` : ""}</span>
+        <span className="orbit-category-swatch" style={{ "--category-color": `var(--orbit-chart-${index % 4 + 1})` }} aria-hidden="true" />
+        <span className="orbit-category-name">{item.name}</span><strong>{dashboardMoney(item.amount, code)}</strong><span className="orbit-category-share">{canDraw ? `${Math.round(item.amount / total * 100)}%` : "—"}</span>
+      </li>)}</ul>
+    </> : <div className="dashboard-empty dashboard-spending-empty"><div className="orbit-empty-ring" aria-hidden="true"><span>—</span></div><div><p>No expenses recorded this month.</p><span className="orbit-empty-copy">See where your money goes, one recorded expense at a time.</span><button className="text-button" onClick={() => navigate("/transactions?new=1")}>Add transaction <ArrowRight size={15} /></button></div></div>}
+  </section>;
+}
+
+function GettingStartedChecklist({ progress, complete, onDismiss, navigate, profile }) {
+  const steps = [
+    { key: "accounts", title: "Add an account", copy: "Choose where your money lives and set its current starting balance.", url: "/accounts?new=1", count: progress.accounts },
+    { key: "transactions", title: "Record your first transaction", copy: "Log income or an expense against one of your accounts.", url: "/transactions?new=1", count: progress.transactions },
+    { key: "budgets", title: "Set your first budget", copy: "Give an everyday spending category a limit that works for you.", url: "/budgets?new=1", count: progress.budgets },
+  ];
+  const finished = steps.filter((step) => step.count > 0).length;
+  return <section className={`getting-started ${complete ? "getting-started-complete" : ""}`} aria-labelledby="getting-started-title">
+    <div className="getting-started-head"><div><span className="guide-progress">Getting started · {complete ? "Guide complete" : `${finished} of 3 steps saved`}</span><h2 id="getting-started-title">{complete ? `You’re all set${profile?.first_name ? `, ${profile.first_name}` : ""}.` : `Welcome${profile?.first_name ? `, ${profile.first_name}` : ""}.`}</h2><p>{complete ? "Your first account, transaction and budget are saved. Your overview will reflect your Budgetly records." : "A few simple steps will make your overview useful. Your progress updates from saved Budgetly data."}</p></div><button type="button" className="icon-button" aria-label="Dismiss getting started guide" onClick={onDismiss}><X size={18} /></button></div>
+    {!complete && <ol className="getting-started-steps">{steps.map((step, index) => <li key={step.key} className={step.count ? "step-complete" : ""}><span className="step-index">{step.count ? <Check size={16} /> : index + 1}</span><div><h3>{step.title}</h3><p>{step.copy}</p></div>{step.count ? <span className="step-status">Saved</span> : <button className="text-button" onClick={() => navigate(step.url)}>Start <ArrowRight size={15} /></button>}</li>)}</ol>}
+    {complete && <button className="secondary-button" onClick={onDismiss}>Continue to overview <ArrowRight size={15} /></button>}
+  </section>;
+}
+
+function monthLabel(value) {
+  if (!value) return "This month";
+  const [year, monthIndex] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(new Date(year, monthIndex - 1, 1));
 }
 
 function ResourcePage({ screen, initialAction, navigate }) {
@@ -140,8 +275,10 @@ function ResourcePage({ screen, initialAction, navigate }) {
   const [withdrawals, setWithdrawals] = useState([]);
   const [busy, setBusy] = useState(true);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [pendingAction, setPendingAction] = useState(null);
   const [dialog, setDialog] = useState(() => initialAction ? { kind: "create", row: null } : null);
   const [notice, setNotice] = useState("");
   const endpoint = endpoints[screen];
@@ -167,13 +304,13 @@ function ResourcePage({ screen, initialAction, navigate }) {
   const load = useCallback(async () => {
     setBusy(true); setError("");
     try { applyResource(await loadResource()); }
-    catch (err) { setError(formErrorMessage(err)); }
+    catch (err) { setError(formErrorMessage(err, { context: "load" })); }
     finally { setBusy(false); }
   }, [applyResource, loadResource]);
   useEffect(() => {
     let active = true;
     loadResource().then((result) => { if (active) applyResource(result); })
-      .catch((err) => { if (active) setError(formErrorMessage(err)); })
+      .catch((err) => { if (active) setError(formErrorMessage(err, { context: "load" })); })
       .finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [applyResource, loadResource]);
@@ -185,21 +322,28 @@ function ResourcePage({ screen, initialAction, navigate }) {
 
   const startCreate = (kind = "create", row = null) => setDialog({ kind, row });
   async function remove(row) {
+    setPendingAction({ kind: "remove", id: row.id });
     setNotice("");
     try {
       if (screen === "Accounts") await api(`${endpoint}${row.id}/archive/`, { method: "POST" });
       else await api(`${endpoint}${row.id}/`, { method: "DELETE" });
       setNotice(screen === "Accounts" ? "Account archived." : `${info.singular[0].toUpperCase()}${info.singular.slice(1)} deleted.`);
       await load();
-    } catch (err) { setError(formErrorMessage(err)); }
+    } finally { setPendingAction(null); }
   }
   async function goalAction(row, action) {
+    setPendingAction({ kind: "goal", id: row.id, action });
+    setNotice("");setActionError("");
     try { await api(`/api/savings/goals/${row.id}/${action}/`, { method: "POST" }); setNotice(({ pause: "Goal paused.", resume: "Goal resumed.", close: "Goal closed.", cancel: "Goal cancelled." })[action]); await load(); }
-    catch (err) { setError(formErrorMessage(err)); }
+    catch (err) { setActionError(formErrorMessage(err, { context: "savings" })); }
+    finally { setPendingAction(null); }
   }
   async function planAction(plan, action) {
+    setPendingAction({ kind: "plan", id: plan.id, action });
+    setNotice("");setActionError("");
     try { await api(`/api/savings/plans/${plan.id}/${action}/`, { method: "POST" }); setNotice(`Savings plan ${action === "pause" ? "paused" : action === "resume" ? "resumed" : `${action}d`}.`); await load(); }
-    catch (err) { setError(formErrorMessage(err)); }
+    catch (err) { setActionError(formErrorMessage(err, { context: "savings" })); }
+    finally { setPendingAction(null); }
   }
   async function changeGoal(row, newStatus) {
     const action = newStatus === "paused" ? "pause" : "resume";
@@ -208,21 +352,30 @@ function ResourcePage({ screen, initialAction, navigate }) {
 
   const columns = buildColumns(screen, { accounts, categories });
   const setupAction = !busy && !error && ((screen === "Transactions" && accounts.length === 0) || (screen === "Transfers" && accounts.length < 2) || (screen === "Loans" && accounts.length === 0) || (screen === "Budgets & Savings" && categories.filter((item) => item.category_type === "expense").length === 0));
-  return <div className="page-content">
-    <div className="page-intro"><div><h1>{info.title}</h1><p className="muted-text">{info.description}</p></div><button className="primary-button" disabled={setupAction} onClick={() => startCreate()}><Plus size={17} />New {info.singular}</button></div>
+  const rowActions = (row) => <>{screen === "Savings goals" && <><button className="small-action" onClick={() => setDialog({ kind: "contribute", row })}>Add funds</button><button className="small-action" onClick={() => startCreate("edit", row)}>Edit</button>{["active", "paused"].includes(row.status) && <LoadingButton className="small-action" disabled={Boolean(pendingAction)} busy={pendingAction?.kind === "goal" && pendingAction.id === row.id && ["pause", "resume"].includes(pendingAction.action)} loadingLabel={row.status === "paused" ? "Resuming…" : "Pausing…"} onClick={() => changeGoal(row, row.status === "paused" ? "active" : "paused")}>{row.status === "paused" ? "Resume" : "Pause"}</LoadingButton>}{["active", "paused", "target_reached"].includes(row.status) && <LoadingButton className="small-action" disabled={Boolean(pendingAction)} busy={pendingAction?.kind === "goal" && pendingAction.id === row.id && pendingAction.action === "close"} loadingLabel="Closing…" onClick={() => goalAction(row, "close")}>Close</LoadingButton>}{!["closed", "cancelled"].includes(row.status) && <LoadingButton className="small-action danger-text" disabled={Boolean(pendingAction)} busy={pendingAction?.kind === "goal" && pendingAction.id === row.id && pendingAction.action === "cancel"} loadingLabel="Cancelling…" onClick={() => goalAction(row, "cancel")}>Cancel</LoadingButton>}</>}{screen === "Loans" && <><button className="small-action" onClick={() => setDialog({ kind: "repayment", row })} disabled={Number(row.total_outstanding ?? row.remaining_amount) <= 0}>Repay</button><button className="small-action" onClick={() => startCreate("edit", row)}>Edit</button><LoadingButton className="small-action danger-text" busy={pendingAction?.kind === "remove" && pendingAction.id === row.id} disabled={Boolean(pendingAction)} loadingLabel="Deleting…" onClick={() => setDialog({ kind: "confirm-delete", row })}>Delete</LoadingButton></>}{screen === "Accounts" && <><button className="small-action" onClick={() => startCreate("edit", row)}>Edit</button><LoadingButton className="small-action" busy={pendingAction?.kind === "remove" && pendingAction.id === row.id} disabled={Boolean(pendingAction)} loadingLabel="Archiving…" onClick={() => setDialog({ kind: "confirm-delete", row })}>Archive</LoadingButton></>}{screen !== "Accounts" && screen !== "Savings goals" && screen !== "Loans" && !(screen === "Categories" && row.user == null) && <><button className="small-action" onClick={() => startCreate("edit", row)}>Edit</button><LoadingButton className="small-action danger-text" busy={pendingAction?.kind === "remove" && pendingAction.id === row.id} disabled={Boolean(pendingAction)} loadingLabel="Deleting…" onClick={() => setDialog({ kind: "confirm-delete", row })}>Delete</LoadingButton></>}</>;
+  return <div className="page-content resource-page" data-resource={screen}>
+    <div className="page-intro"><div><h1>{info.title}</h1><p className="muted-text">{info.description}</p></div><div className="resource-primary-actions">{screen === "Loans" && <button className="secondary-button" onClick={() => startCreate("repayment")}><ArrowLeftRight size={15} />Record repayment</button>}<button className="primary-button" disabled={setupAction} onClick={() => startCreate()}><Plus size={17} />New {info.singular}</button></div></div>
     {notice && <p className="inline-notice" role="status"><Check size={16} />{notice}<button aria-label="Dismiss message" onClick={() => setNotice("")}><X size={15} /></button></p>}
     {error && <ErrorState error={error} retry={load} compact />}
+    <ErrorNotice message={actionError} />
     {screen === "Transactions" && <div className="filter-row"><label className="table-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search transactions" aria-label="Search transactions" /></label><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} aria-label="Filter by type"><option value="all">All activity</option><option value="income">Income</option><option value="expense">Expenses</option></select></div>}
     {screen === "Budgets & Savings" && <p className="backend-note">The current budget API does not include a currency field. Amounts are shown as entered and the API does not convert spending across currencies.</p>}
     {screen === "Savings goals" && <p className="backend-note">Goal contributions are tracked separately. The current API does not post them as account transactions.</p>}
     {setupAction && <p className="backend-note">{screen === "Transfers" ? "Add at least two active accounts before creating a transfer." : screen === "Budgets & Savings" ? "Create an expense category before setting a budget." : "Add an account before recording this activity."}</p>}
     {screen === "Savings goals" && <div className="goal-action-row"><button className="secondary-button" onClick={() => startCreate("contribute")}><Plus size={15} />Record contribution</button><button className="secondary-button" onClick={() => startCreate("withdraw")}><ArrowUpRight size={15} />Record withdrawal</button><button className="secondary-button" onClick={() => startCreate("plan")}><CalendarDays size={15} />Create saving plan</button></div>}
-    {screen === "Loans" && <div className="goal-action-row"><button className="secondary-button" onClick={() => startCreate("repayment")}><ArrowLeftRight size={15} />Record repayment</button></div>}
-    {busy ? <LoadingState label={`Loading ${info.title.toLowerCase()}`} /> : error ? null : visibleRows.length ? <div className="table-wrap"><table className="data-table"><thead><tr>{columns.map((col) => <th key={col.key}>{col.label}</th>)}<th><span className="visually-hidden">Actions</span></th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id}>{columns.map((col) => <td key={col.key} data-label={col.label}>{col.render ? col.render(row) : row[col.key] ?? "—"}</td>)}<td className="row-actions" data-label="Actions">{screen === "Savings goals" && <><button className="small-action" onClick={() => setDialog({ kind: "contribute", row })}>Add funds</button><button className="small-action" onClick={() => startCreate("edit", row)}>Edit</button>{["active", "paused"].includes(row.status) && <button className="small-action" onClick={() => changeGoal(row, row.status === "paused" ? "active" : "paused")}>{row.status === "paused" ? "Resume" : "Pause"}</button>}{["active", "paused", "target_reached"].includes(row.status) && <button className="small-action" onClick={() => goalAction(row, "close")}>Close</button>}{!["closed", "cancelled"].includes(row.status) && <button className="small-action danger-text" onClick={() => goalAction(row, "cancel")}>Cancel</button>}</>}{screen === "Loans" && <><button className="small-action" onClick={() => setDialog({ kind: "repayment", row })} disabled={Number(row.total_outstanding ?? row.remaining_amount) <= 0}>Repay</button><button className="small-action" onClick={() => startCreate("edit", row)}>Edit</button><button className="small-action danger-text" onClick={() => setDialog({ kind: "confirm-delete", row })}>Delete</button></>}{screen === "Accounts" && <><button className="small-action" onClick={() => startCreate("edit", row)}>Edit</button><button className="small-action" onClick={() => setDialog({ kind: "confirm-delete", row })}>Archive</button></>}{screen !== "Accounts" && screen !== "Savings goals" && screen !== "Loans" && !(screen === "Categories" && row.user == null) && <><button className="small-action" onClick={() => startCreate("edit", row)}>Edit</button><button className="small-action danger-text" onClick={() => setDialog({ kind: "confirm-delete", row })}>Delete</button></>}</td></tr>)}</tbody></table></div> : <EmptyState icon={screen === "Categories" ? Filter : Wallet} title={query ? "No matching records" : setupAction ? "One thing to add first" : screen === "Categories" ? "Start with your first category" : emptyTitle(screen)} copy={query ? "Try another search or clear the filter." : setupAction ? screen === "Transfers" ? "Create two accounts before recording a transfer." : screen === "Budgets & Savings" ? "Add an expense category first so your limit is attached to the right spending." : "Add an account first so this activity changes the right balance." : screen === "Categories" ? "Categories keep income and spending organised. Create one now, then use it straight away when you add a matching transaction." : `Add your first ${info.singular} to see it here.`} action={query ? null : setupAction ? (screen === "Transfers" ? "Add accounts" : screen === "Budgets & Savings" ? "Add an expense category" : "Add an account") : screen === "Categories" ? "Add category" : `Add ${info.singular}`} onClick={() => query ? setQuery("") : setupAction ? navigate(screen === "Budgets & Savings" ? "/categories?new=1" : "/accounts?new=1") : startCreate()} />}
-    {screen === "Savings goals" && <SavingsPlans plans={goals} goalRows={rows} onAction={planAction} />}
+    {busy ? <ResourceLoading screen={screen} title={info.title} columns={columns} /> : error ? null : visibleRows.length ? <section className="resource-collection" aria-label={info.title + " records"}><div className="resource-collection-heading"><h2>{screen === "Loans" ? "Your loan agreements" : screen === "Accounts" ? "Your accounts" : screen === "Transactions" ? "Your activity" : info.title}</h2><span>{visibleRows.length} {visibleRows.length === 1 ? info.singular : info.singular === "category" ? "categories" : info.singular + "s"}</span></div>{screen === "Loans" ? <div className="loan-records">{visibleRows.map((row) => <LoanRecord key={row.id} row={row} columns={columns} actions={rowActions(row)} />)}</div> : <div className="table-wrap"><table className="data-table" role="table" aria-label={info.title}><thead role="rowgroup"><tr role="row">{columns.map((col) => <th key={col.key} scope="col" className={"record-col-" + col.key} id={"record-head-" + col.key} role="columnheader">{col.label}</th>)}<th id="record-head-actions" scope="col" role="columnheader"><span className="visually-hidden">Actions</span></th></tr></thead><tbody role="rowgroup">{visibleRows.map((row) => <tr key={row.id} role="row">{columns.map((col) => <td key={col.key} className={"record-col-" + col.key} headers={"record-head-" + col.key} role="cell" data-label={col.label}>{col.render ? col.render(row) : row[col.key] ?? "—"}</td>)}<td className="row-actions" headers="record-head-actions" role="cell" data-label="Actions"><div className="record-actions">{rowActions(row)}</div></td></tr>)}</tbody></table></div>}</section> : <EmptyState icon={screen === "Categories" ? Filter : Wallet} title={query ? "No matching records" : setupAction ? "One thing to add first" : screen === "Categories" ? "Start with your first category" : emptyTitle(screen)} copy={query ? "Try another search or clear the filter." : setupAction ? screen === "Transfers" ? "Create two accounts before recording a transfer." : screen === "Budgets & Savings" ? "Add an expense category first so your limit is attached to the right spending." : "Add an account first so this activity changes the right balance." : screen === "Categories" ? "Categories keep income and spending organised. Create one now, then use it straight away when you add a matching transaction." : `Add your first ${info.singular} to see it here.`} action={query ? null : setupAction ? (screen === "Transfers" ? "Add accounts" : screen === "Budgets & Savings" ? "Add an expense category" : "Add an account") : screen === "Categories" ? "Add category" : `Add ${info.singular}`} onClick={() => query ? setQuery("") : setupAction ? navigate(screen === "Budgets & Savings" ? "/categories?new=1" : "/accounts?new=1") : startCreate()} />}
+    {screen === "Savings goals" && <SavingsPlans pendingAction={pendingAction} plans={goals} goalRows={rows} onAction={planAction} />}
     {screen === "Savings goals" && <SavingsActivity contributions={contributions} withdrawals={withdrawals} goalRows={rows} />}
-    {dialog && <ResourceDialog screen={screen} dialog={dialog} accounts={accounts} categories={categories} goals={screen === "Savings goals" || screen === "Loans" ? rows : []} navigate={navigate} onClose={() => setDialog(null)} onSaved={async (message) => { setDialog(null); setNotice(message); await load(); }} onDelete={async (row) => { setDialog(null); await remove(row); }} />}
+    {dialog && <ResourceDialog screen={screen} dialog={dialog} accounts={accounts} categories={categories} goals={screen === "Savings goals" || screen === "Loans" ? rows : []} navigate={navigate} onClose={() => setDialog(null)} onSaved={async (message) => { setDialog(null); setNotice(message); await load(); }} onDelete={async (row) => { await remove(row);setDialog(null); }} />}
   </div>;
+}
+
+function LoanRecord({ row, columns, actions }) {
+  const cell = (key) => columns.find((column) => column.key === key)?.render(row);
+  return <article className="loan-record" aria-label={"Loan with " + row.person_name} data-loan-type={row.loan_type}>
+    <div className="loan-record-main"><div className="loan-record-person"><span className="loan-person-mark" aria-hidden="true">{(row.person_name || "L").slice(0, 1).toUpperCase()}</span>{cell("person_name")}</div><div className="loan-record-balance"><span className="resource-caption">Total outstanding</span>{cell("total_outstanding")}</div></div>
+    <div className="loan-record-footer"><div className="loan-record-due"><span className="resource-caption">Due date</span><strong>{cell("due_date")}</strong></div><div className="loan-record-repayments"><span className="resource-caption">Repayments</span>{cell("repayments")}</div><div className="loan-record-status"><span className="resource-caption">Status</span>{cell("status")}</div><div className="record-actions loan-record-actions">{actions}</div></div>
+  </article>;
 }
 
 function emptyTitle(screen) {
@@ -265,8 +418,8 @@ function buildColumns(screen, { accounts, categories }) {
     { key: "status", label: "Status", render: (r) => <Status value={r.status} /> },
   ];
   if (screen === "Loans") return [
-    { key: "person_name", label: "Loan", render: (r) => <div className="table-primary"><strong>{r.person_name}</strong><small>{titleCase(r.loan_type)} · {r.description || "No description"}</small><small className="loan-agreement">{loanInterestAgreement(r)}</small><small>Original amount · {money(r.original_amount, r.currency)}</small></div> },
-    { key: "total_outstanding", label: "Total outstanding", render: (r) => <div className="loan-balance-cell"><strong>{money(r.total_outstanding ?? r.remaining_amount ?? r.original_amount, r.currency)}</strong><small>Principal · {money(r.outstanding_principal ?? r.remaining_amount, r.currency)}</small><small>{r.accrued_interest != null ? `Accrued interest · ${money(r.accrued_interest, r.currency)}` : "Interest breakdown unavailable"}</small>{r.interest_as_of_date && <small>Interest as of · {formatDate(r.interest_as_of_date)}</small>}</div> },
+    { key: "person_name", label: "Loan", render: (r) => <div className="table-primary loan-identity"><div className="loan-person-title"><strong>{r.person_name}</strong><span className="loan-direction">{titleCase(r.loan_type)}</span></div><small>{r.description || "No description"}</small><small className="loan-agreement">{loanInterestAgreement(r)}</small><small className="loan-original-amount">Original amount · {money(r.original_amount, r.currency)}</small></div> },
+    { key: "total_outstanding", label: "Total outstanding", render: (r) => <div className="loan-balance-cell"><strong>{money(r.total_outstanding ?? r.remaining_amount ?? r.original_amount, r.currency)}</strong><div className="loan-balance-breakdown"><div><span>Principal</span><b>{money(r.outstanding_principal ?? r.remaining_amount, r.currency)}</b></div><div><span>Accrued interest</span><b>{r.accrued_interest != null ? money(r.accrued_interest, r.currency) : "Interest breakdown unavailable"}</b></div></div>{r.interest_as_of_date && <small className="loan-interest-date">Interest as of · {formatDate(r.interest_as_of_date)}</small>}</div> },
     { key: "due_date", label: "Due", render: (r) => r.due_date ? formatDate(r.due_date) : "No due date" },
     { key: "repayments", label: "Repayments", render: (r) => <details className="record-details"><summary>{r.repayments?.length || 0} recorded</summary>{r.repayments?.length ? <ul>{r.repayments.map((item) => <li key={item.id}><strong>{formatDate(item.repayment_date)} · paid {money(item.amount, r.currency)}</strong><small>{item.interest_amount != null ? `Interest paid · ${money(item.interest_amount, r.currency)}` : "Interest allocation unavailable"}</small><small>{item.principal_amount != null ? `Principal paid · ${money(item.principal_amount, r.currency)}` : "Principal allocation unavailable"}</small>{item.note && <small>{item.note}</small>}</li>)}</ul> : <p>No repayments recorded.</p>}</details> },
     { key: "status", label: "Status", render: (r) => <Status value={r.status} /> },
@@ -282,6 +435,8 @@ function ResourceDialog({ screen, dialog, accounts, categories, goals, navigate,
   const [values, setValues] = useState(() => ({ ...(dialog.row || {}), transaction_type: dialog.row?.transaction_type || "expense", transaction_date: dialog.row?.transaction_date || today(), repayment_date: today(), contribution_date: today(), withdrawal_date: today(), start_date: dialog.row?.start_date || `${month()}-01`, end_date: dialog.row?.end_date || lastDay(month()), loan_date: dialog.row?.loan_date || today(), ...loanInterestFormState(dialog.row), period_type: dialog.row?.period_type || "monthly", rate_source: dialog.row?.rate_source || "live", currency: dialog.row?.currency || "KES", saving_method: dialog.row?.saving_method || "other" }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({}), [formErrors, setFormErrors] = useState([]);
+  const formRef = useRef(null);
   const kind = dialog.kind;
   const isEdit = kind === "edit";
   const loanHasRepayments = screen === "Loans" && isEdit && (dialog.row?.repayments?.length || 0) > 0;
@@ -290,7 +445,7 @@ function ResourceDialog({ screen, dialog, accounts, categories, goals, navigate,
   if (kind === "confirm-delete") {
     const isArchive = screen === "Accounts";
     const recordName = dialog.row.description || dialog.row.name || dialog.row.person_name;
-    return <Modal title={isArchive ? "Archive this account?" : "Delete this record?"} onClose={onClose}><p className="dialog-copy">{isArchive ? `“${dialog.row.name}” will be removed from your active account list and overview totals. Its transaction history remains recorded.` : `This removes “${recordName}” from your records.`}</p>{error && <p className="form-message form-message-error">{error}</p>}<div className="dialog-actions"><button className="secondary-button" onClick={onClose}>Keep record</button><button className="danger-button" disabled={busy} onClick={async () => { setBusy(true); try { await onDelete(dialog.row); } catch (e) { setError(formErrorMessage(e)); setBusy(false); } }}>{isArchive ? "Archive account" : "Delete record"}</button></div></Modal>;
+    return <Modal title={isArchive ? "Archive this account?" : "Delete this record?"} onClose={onClose}><p className="dialog-copy">{isArchive ? `“${dialog.row.name}” will be removed from your active account list and overview totals. Its transaction history remains recorded.` : `This removes “${recordName}” from your records.`}</p><ErrorNotice message={error} /><div className="dialog-actions"><button className="secondary-button" onClick={onClose}>Keep record</button><LoadingButton className="danger-button" busy={busy} loadingLabel={isArchive ? "Archiving account…" : "Deleting record…"} onClick={async event => { const panel = event.currentTarget.closest('[role="dialog"]');setBusy(true);setError("");try { await onDelete(dialog.row); } catch (error) { setError(formErrorMessage(error, { context: isArchive ? "archive" : "remove" }));focusFormError(panel); } finally { setBusy(false); } }}>{isArchive ? "Archive account" : "Delete record"}</LoadingButton></div></Modal>;
   }
   const fields = dialogFields(screen, kind, values, set, accounts, categories, goals, dialog);
   const heading = ({ contribute: "Record a contribution", withdraw: "Record a withdrawal", plan: "Create a savings plan", repayment: "Record a repayment" })[kind] || `${isEdit ? "Edit" : "New"} ${metadata[screen].singular}`;
@@ -304,11 +459,12 @@ function ResourceDialog({ screen, dialog, accounts, categories, goals, navigate,
       : "";
 
   async function submit(event) {
-    event.preventDefault(); setError("");
+    event.preventDefault(); setError("");setFieldErrors({});setFormErrors([]);
     const canUpdateLoanInterest = screen === "Loans" && (kind === "create" || isEdit) && !loanHasRepayments && !noInterestLoanLocked;
     const loanInterestPayload = canUpdateLoanInterest ? buildLoanInterestPayload(values, dialog.row, isEdit) : {};
     if (canUpdateLoanInterest && !loanInterestPayload) {
-      setError(loanInterestValidationMessage(values));
+      const field = values.interest_type === "percentage" ? values.interest_frequency === "annual" ? "annual_interest_rate" : "periodic_interest_rate" : "fixed_interest_amount";
+      setFieldErrors({ [field]: loanInterestValidationMessage(values) });setError("Please check the highlighted details.");focusFormError(formRef.current);
       return;
     }
     setBusy(true);
@@ -341,17 +497,20 @@ function ResourceDialog({ screen, dialog, accounts, categories, goals, navigate,
       await api(path, { method, body: jsonBody(payload) });
       const label = metadata[screen].singular;
       await onSaved(isEdit ? `${label[0].toUpperCase()}${label.slice(1)} updated.` : `${label[0].toUpperCase()}${label.slice(1)} created.`);
-    } catch (err) { setError(formErrorMessage(err)); }
+    } catch (err) {
+      const result = normalizeError(err, { context: "record", fields, aliases: { interest_method: "interest_type" } });
+      setFieldErrors(result.fieldErrors);setFormErrors(result.formErrors);setError(result.message);focusFormError(formRef.current);
+    }
     finally { setBusy(false); }
   }
   const hasMatchingCategory = categories.some((category) => category.category_type === values.transaction_type);
-  return <Modal title={heading} onClose={onClose}><form className="resource-form" onSubmit={submit}>
-    {error && <p className="form-message form-message-error" role="alert">{error}</p>}
+  return <Modal title={heading} onClose={onClose}><form ref={formRef} className="resource-form" onSubmit={submit}>
+    <ErrorNotice message={error} messages={formErrors} />
     {loanTermsNotice && <p className="form-message form-message-info" role="note">{loanTermsNotice}</p>}
     {screen === "Transactions" && !hasMatchingCategory && <p className="form-message form-message-info" role="status">There are no {values.transaction_type} categories yet. <button className="text-button" type="button" onClick={() => { onClose(); navigate("/categories?new=1"); }}>Create a category</button>, then return to record this transaction.</p>}
-    <div className="dialog-fields">{fields.map((field) => <FieldControl key={field.name} field={field} value={values[field.name]} set={set} setError={setError} accounts={accounts} categories={categories} goals={goals} isEdit={isEdit} />)}</div>
+    <div className="dialog-fields">{fields.map((field) => <FieldControl key={field.name} field={field} value={values[field.name]} set={set} setError={setError} error={fieldErrors[field.name]} onFieldError={(name, message) => setFieldErrors(current => ({ ...current, [name]: message }))} accounts={accounts} categories={categories} goals={goals} isEdit={isEdit} />)}</div>
     {showTransferPreview && <TransferPreview from={sourceAccount.currency} to={destinationAccount.currency} amount={values.from_amount} />}
-    <div className="dialog-actions"><button className="secondary-button" type="button" onClick={onClose}>Cancel</button><button className="primary-button" type="submit" disabled={busy}>{busy ? "Saving…" : isEdit ? "Save changes" : heading}</button></div>
+    <div className="dialog-actions"><button className="secondary-button" type="button" onClick={onClose}>Cancel</button><LoadingButton className="primary-button" type="submit" busy={busy} loadingLabel="Saving…">{isEdit ? "Save changes" : heading}</LoadingButton></div>
   </form></Modal>;
 }
 
@@ -449,17 +608,15 @@ function dialogFields(screen, kind, values, set, accounts, categories, goals, di
   return [];
 }
 
-function FieldControl({ field, value, set, setError, isEdit }) {
-  const onChange = (event) => { setError(""); field.onChange ? field.onChange(event.target.type === "checkbox" ? event.target.checked : event.target.value) : set(field.name, event.target.type === "checkbox" ? event.target.checked : event.target.value); };
+function FieldControl({ field, value, set, setError, isEdit, error, onFieldError }) {
+  const errorId = `record-${field.name}-error`, hintId = `record-${field.name}-hint`;
+  const onChange = (event) => { setError("");onFieldError(field.name, "");field.onChange ? field.onChange(event.target.type === "checkbox" ? event.target.checked : event.target.value) : set(field.name, event.target.type === "checkbox" ? event.target.checked : event.target.value); };
   const onInvalid = (event) => {
-    if (["annual_interest_rate", "periodic_interest_rate"].includes(field.name)) { setError("Enter a positive percentage with no more than four decimal places."); return; }
-    if (field.name === "fixed_interest_amount") { setError("Enter a positive fixed interest amount with no more than two decimal places."); return; }
-    if (!field.required) return;
-    setError(field.name === "account_type" && !event.currentTarget.value ? "Choose an account type before saving." : event.currentTarget.validationMessage || `${field.label} is required.`);
+    event.preventDefault();onFieldError(field.name, nativeValidationMessage(event.currentTarget));setError("Please check the highlighted details.");focusFormError(event.currentTarget.form);
   };
-  if (field.type === "checkbox") return <label className="checkbox-field"><input type="checkbox" name={field.name} checked={Boolean(value)} onChange={onChange} /><span>{field.label}</span></label>;
-  const common = { name: field.name, value: value ?? "", onChange, onInvalid, required: field.required, disabled: field.disabled, min: field.min, step: field.step };
-  return <label className={`field ${field.type === "textarea" ? "field-wide" : ""}`}><span>{field.label}{isEdit && field.name === "exchange_rate" ? " · historical rate cannot change" : ""}</span>{field.hint && <small className="field-hint">{field.hint}</small>}{field.type === "select" ? <select {...common}>{!field.options?.length ? <option value="">No compatible options available</option> : <>{field.required && !field.options.some(([optionValue]) => String(optionValue) === "") && <option value="">Select {field.label.toLowerCase()}</option>}{field.options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}</>}</select> : field.type === "textarea" ? <textarea {...common} rows={3} /> : <input {...common} type={field.type || "text"} />}</label>;
+  if (field.type === "checkbox") return <label className="checkbox-field"><input type="checkbox" name={field.name} checked={Boolean(value)} onChange={onChange} aria-invalid={error ? true : undefined} aria-describedby={error ? errorId : undefined} /><span>{field.label}<FieldError id={errorId} message={error} /></span></label>;
+  const common = { name: field.name, value: value ?? "", onChange, onInvalid, required: field.required, disabled: field.disabled, min: field.min, step: field.step, "aria-invalid": error ? true : undefined, "aria-describedby": [field.hint ? hintId : "", error ? errorId : ""].filter(Boolean).join(" ") || undefined };
+  return <label className={`field ${field.type === "textarea" ? "field-wide" : ""}`}><span>{field.label}{isEdit && field.name === "exchange_rate" ? " · historical rate cannot change" : ""}</span>{field.hint && <small id={hintId} className="field-hint">{field.hint}</small>}{field.type === "select" ? <select {...common}>{!field.options?.length ? <option value="">No compatible options available</option> : <>{field.required && !field.options.some(([optionValue]) => String(optionValue) === "") && <option value="">Select {field.label.toLowerCase()}</option>}{field.options.map(([optionValue, label]) => <option key={optionValue} value={optionValue}>{label}</option>)}</>}</select> : field.type === "textarea" ? <textarea {...common} rows={3} /> : <input {...common} type={field.type || "text"} />}<FieldError id={errorId} message={error} /></label>;
 }
 
 function TransferPreview({ from, to, amount }) {
@@ -467,17 +624,17 @@ function TransferPreview({ from, to, amount }) {
   useEffect(() => {
     let active = true;
     api("/api/exchange-rates/", { query: { from, to } }).then((result) => { if (active) setState({ loading: false, rate: Number(result.rate), error: "" }); })
-      .catch((err) => { if (active) setState({ loading: false, rate: null, error: formErrorMessage(err) }); });
+      .catch((err) => { if (active) setState({ loading: false, rate: null, error: formErrorMessage(err, { context: "exchange" }) }); });
     return () => { active = false; };
   }, [from, to]);
-  if (state.loading) return <p className="form-message form-message-info transfer-preview" role="status">Checking the current {from} to {to} rate…</p>;
+  if (state.loading) return <p className="form-message form-message-info transfer-preview"><InlineLoading>Checking the current {from} to {to} rate…</InlineLoading></p>;
   if (state.error) return <p className="form-message form-message-info transfer-preview" role="status">A live preview isn’t available. Budgetly will validate the rate when you save the transfer.</p>;
   return <p className="form-message form-message-info transfer-preview" role="status">Estimated received amount: <strong>{money(Number(amount || 0) * state.rate, to)}</strong><span> · Rate {state.rate.toLocaleString(undefined, { maximumFractionDigits: 8 })} {to} per {from}. The backend records its live rate on save.</span></p>;
 }
 
-function SavingsPlans({ plans, goalRows, onAction }) {
+function SavingsPlans({ plans, goalRows, onAction, pendingAction }) {
   if (!plans.length) return null;
-  return <section className="plans-section"><div className="section-heading"><div><h2>Saving plans</h2><p>Contribution schedules linked to your goals</p></div></div><div className="plan-list">{plans.map((plan) => { const goal = goalRows.find((item) => item.id === plan.goal); return <div className="plan-row" key={plan.id}><span><strong>{money(plan.amount, goal?.currency || "KES")} · {plan.frequency}</strong><small>{goal?.name || `Goal #${plan.goal}`} · starts {formatDate(plan.start_date)}</small></span><Status value={plan.status} /><span className="plan-actions">{plan.status === "active" && <button className="small-action" onClick={() => onAction(plan, "pause")}>Pause</button>}{plan.status === "paused" && <button className="small-action" onClick={() => onAction(plan, "resume")}>Resume</button>}{["active", "paused"].includes(plan.status) && <><button className="small-action" onClick={() => onAction(plan, "complete")}>Complete</button><button className="small-action danger-text" onClick={() => onAction(plan, "cancel")}>Cancel</button></>}</span></div>; })}</div></section>;
+  return <section className="plans-section"><div className="section-heading"><div><h2>Saving plans</h2><p>Contribution schedules linked to your goals</p></div></div><div className="plan-list">{plans.map((plan) => { const goal = goalRows.find((item) => item.id === plan.goal); return <div className="plan-row" key={plan.id}><span><strong>{money(plan.amount, goal?.currency || "KES")} · {plan.frequency}</strong><small>{goal?.name || `Goal #${plan.goal}`} · starts {formatDate(plan.start_date)}</small></span><Status value={plan.status} /><span className="plan-actions">{plan.status === "active" && <LoadingButton className="small-action" disabled={Boolean(pendingAction)} busy={pendingAction?.kind === "plan" && pendingAction.id === plan.id && pendingAction.action === "pause"} loadingLabel="Pausing…" onClick={() => onAction(plan, "pause")}>Pause</LoadingButton>}{plan.status === "paused" && <LoadingButton className="small-action" disabled={Boolean(pendingAction)} busy={pendingAction?.kind === "plan" && pendingAction.id === plan.id && pendingAction.action === "resume"} loadingLabel="Resuming…" onClick={() => onAction(plan, "resume")}>Resume</LoadingButton>}{["active", "paused"].includes(plan.status) && <><LoadingButton className="small-action" disabled={Boolean(pendingAction)} busy={pendingAction?.kind === "plan" && pendingAction.id === plan.id && pendingAction.action === "complete"} loadingLabel="Completing…" onClick={() => onAction(plan, "complete")}>Complete</LoadingButton><LoadingButton className="small-action danger-text" disabled={Boolean(pendingAction)} busy={pendingAction?.kind === "plan" && pendingAction.id === plan.id && pendingAction.action === "cancel"} loadingLabel="Cancelling…" onClick={() => onAction(plan, "cancel")}>Cancel</LoadingButton></>}</span></div>; })}</div></section>;
 }
 
 function SavingsActivity({ contributions, withdrawals, goalRows }) {
@@ -491,17 +648,37 @@ function SavingsActivity({ contributions, withdrawals, goalRows }) {
 function ExchangePage() {
   const [from, setFrom] = useState("KES"); const [to, setTo] = useState("USD"); const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
-  async function lookup(event) { event.preventDefault(); setBusy(true); setError(""); setResult(null); try { setResult(await api("/api/exchange-rates/", { query: { from, to } })); } catch (err) { setError(formErrorMessage(err)); } finally { setBusy(false); } }
-  return <div className="page-content"><div className="page-intro"><div><h1>Exchange rates</h1><p className="muted-text">Check the live rate used for cross-currency transfers.</p></div></div><section className="exchange-panel"><div className="exchange-panel-head"><BadgeDollarSign size={22} /><div><h2>Look up a rate</h2><p>Rates are retrieved from the exchange-rate service configured by Budgetly.</p></div></div><form className="exchange-form" onSubmit={lookup}><label className="field"><span>From</span><select value={from} onChange={(e) => setFrom(e.target.value)}><option>KES</option><option>USD</option></select></label><ArrowRight className="exchange-arrow" size={20} /><label className="field"><span>To</span><select value={to} onChange={(e) => setTo(e.target.value)}><option>USD</option><option>KES</option></select></label><button className="primary-button" disabled={busy || from === to}>{busy ? "Checking…" : "Get current rate"}</button></form>{error && <p className="form-message form-message-error" role="alert">{error}</p>}{result && <div className="rate-result"><span>1 {result.from} equals</span><strong>{Number(result.rate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {result.to}</strong><small>Source: {result.source} · checked just now. Transfer records keep their original rate.</small></div>}</section><p className="muted-text exchange-note">For transfers, Budgetly records the conversion rate and received amount at the time you create the transfer.</p></div>;
+  async function lookup(event) { event.preventDefault(); setBusy(true); setError(""); setResult(null); try { setResult(await api("/api/exchange-rates/", { query: { from, to } })); } catch (err) { setError(formErrorMessage(err, { context: "exchange" })); } finally { setBusy(false); } }
+  return <div className="page-content"><div className="page-intro"><div><h1>Exchange rates</h1><p className="muted-text">Check the live rate used for cross-currency transfers.</p></div></div><section className="exchange-panel"><div className="exchange-panel-head"><BadgeDollarSign size={22} /><div><h2>Look up a rate</h2><p>Rates are retrieved from the exchange-rate service configured by Budgetly.</p></div></div><form className="exchange-form" onSubmit={lookup}><label className="field"><span>From</span><select value={from} onChange={(e) => setFrom(e.target.value)}><option>KES</option><option>USD</option></select></label><ArrowRight className="exchange-arrow" size={20} /><label className="field"><span>To</span><select value={to} onChange={(e) => setTo(e.target.value)}><option>USD</option><option>KES</option></select></label><LoadingButton className="primary-button" busy={busy} disabled={from === to} loadingLabel="Checking rate…">Get current rate</LoadingButton></form><ErrorNotice message={error} />{result && <div className="rate-result"><span>1 {result.from} equals</span><strong>{Number(result.rate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {result.to}</strong><small>Source: {result.source} · checked just now. Transfer records keep their original rate.</small></div>}</section><p className="muted-text exchange-note">For transfers, Budgetly records the conversion rate and received amount at the time you create the transfer.</p></div>;
 }
 
-function SettingsPage({ profile, theme, onThemeChange, onReopenOnboarding, onProfileChange, onLogout, navigate }) {
+function SettingsPage({ logoutBusy, profile, theme, onThemeChange, onReopenOnboarding, onProfileChange, onLogout, navigate }) {
   const [form, setForm] = useState({ first_name: profile?.first_name || "", last_name: profile?.last_name || "", email: profile?.email || "", username: profile?.username || "" });
   const [password, setPassword] = useState({ old_password: "", new_password: "", confirm_password: "" });
   const [deleteForm, setDeleteForm] = useState({ password: "", confirmation: "" });
-  const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const [notice, setNotice] = useState("");
-  async function downloadExport() {
-    setBusy(true); setError(""); setNotice("");
+  const [pendingAction, setPendingAction] = useState("");
+  const [busy, setBusy] = useState(false), [notice, setNotice] = useState("");
+  const [failure, setFailure] = useState({ scope: "", result: null });
+  const fields = { profile: { first_name: "First name", last_name: "Last name", email: "Email address" }, password: { old_password: "Current password", new_password: "New password", confirm_password: "Confirm new password" }, deleteAccount: { password: "Password" } };
+  function start(scope) { setPendingAction(scope === "deleteAccount" ? "delete" : scope);setBusy(true);setFailure({ scope: "", result: null });setNotice(""); }
+  function showFailure(error, scope, form) { setFailure({ scope, result: normalizeError(error, { context: scope, fields: fields[scope] || {} }) });focusFormError(form); }
+  function clear(scope, name) {
+    setFailure(current => {
+      if (current.scope !== scope) return current;
+      const fieldErrors = { ...current.result?.fieldErrors, [name]: "" };
+      const message = current.result?.kind === "validation" && !Object.values(fieldErrors).some(Boolean) && !current.result?.formErrors?.length ? "" : current.result?.message;
+      return { ...current, result: { ...current.result, message, fieldErrors } };
+    });
+  }
+  const fieldError = (scope, name) => failure.scope === scope ? failure.result?.fieldErrors[name] : "";
+  const feedback = scope => failure.scope === scope ? <ErrorNotice message={failure.result?.message} messages={failure.result?.formErrors} /> : null;
+  function invalid(event, scope) {
+    event.preventDefault();const control = event.target;setNotice("");
+    setFailure(current => ({ scope, result: { kind: "validation", message: "Please check the highlighted details.", fieldErrors: { ...(current.scope === scope ? current.result?.fieldErrors : {}), [control.name]: nativeValidationMessage(control) } } }));
+    focusFormError(control.form);
+  }
+    async function downloadExport() {
+    start("export");
     try {
       const paths = [
         ["profile", "/api/auth/profile/"], ["accounts", "/api/accounts/"], ["categories", "/api/categories/"],
@@ -518,13 +695,65 @@ function SettingsPage({ profile, theme, onThemeChange, onReopenOnboarding, onPro
       document.body.append(download); download.click(); download.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
       setNotice("Your Budgetly data export has been downloaded to this device.");
-    } catch (err) { setError(formErrorMessage(err)); }
+    } catch (err) { showFailure(err, "export"); }
     finally { setBusy(false); }
   }
-  async function saveProfile(event) { event.preventDefault(); setBusy(true); setError(""); setNotice(""); try { const updated = await api("/api/auth/profile/", { method: "PATCH", body: jsonBody({ first_name: form.first_name, last_name: form.last_name, email: form.email }) }); onProfileChange(updated); setNotice("Profile updated."); } catch (err) { setError(formErrorMessage(err)); } finally { setBusy(false); } }
-  async function changePassword(event) { event.preventDefault(); setBusy(true); setError(""); setNotice(""); try { await api("/api/auth/change-password/", { method: "POST", body: jsonBody(password) }); setPassword({ old_password: "", new_password: "", confirm_password: "" }); setNotice("Password changed."); } catch (err) { setError(formErrorMessage(err)); } finally { setBusy(false); } }
-  async function deleteAccount(event) { event.preventDefault(); if (deleteForm.confirmation !== "DELETE") return; setBusy(true); setError(""); try { await api("/api/auth/delete-account/", { method: "DELETE", body: jsonBody({ password: deleteForm.password }) }); sessionStorage.removeItem("budgetly.access"); sessionStorage.removeItem("budgetly.refresh"); onLogout("/logout"); } catch (err) { setError(formErrorMessage(err)); } finally { setBusy(false); } }
-  return <div className="page-content"><div className="page-intro"><div><h1>Settings</h1><p className="muted-text">Manage the personal details and sign-in credentials on your account.</p></div></div>{notice && <p className="inline-notice" role="status"><Check size={16} />{notice}</p>}{error && <p className="form-message form-message-error" role="alert">{error}</p>}<div className="settings-grid"><section className="settings-section"><div className="section-heading"><div><h2>Personal details</h2><p>Your profile information</p></div></div><form className="settings-form" onSubmit={saveProfile}><label className="field"><span>Username</span><input value={form.username} disabled /></label><div className="form-row"><label className="field"><span>First name</span><input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></label><label className="field"><span>Last name</span><input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} /></label></div><label className="field"><span>Email address</span><input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label><button className="primary-button" disabled={busy}>Save profile</button></form></section><section className="settings-section"><div className="section-heading"><div><h2>Password & security</h2><p>Change a known password or reset one you’ve forgotten.</p></div></div><form className="settings-form" onSubmit={changePassword}><PasswordInput label="Current password" value={password.old_password} onChange={(value) => setPassword({ ...password, old_password: value })} /><PasswordInput label="New password" value={password.new_password} onChange={(value) => setPassword({ ...password, new_password: value })} /><PasswordInput label="Confirm new password" value={password.confirm_password} onChange={(value) => setPassword({ ...password, confirm_password: value })} /><button className="secondary-button" disabled={busy}>Update password</button></form><button className="settings-reset-link" type="button" onClick={() => navigate("/forgot-password")}>Forgot your password? Reset it <ArrowRight size={15} /></button><div className="settings-session"><h3>Session</h3><p>The app stores this session’s tokens in this browser tab. Signing out sends the refresh token to Budgetly’s revocation endpoint.</p><button className="text-button danger-text" onClick={() => onLogout("/logout")}>Sign out <ArrowRight size={15} /></button></div></section><section className="settings-section"><div className="section-heading"><div><h2>Appearance</h2><p>Choose how Budgetly looks on this device.</p></div></div><div className="settings-form"><label className="field"><span>Theme</span><select value={theme} onChange={(event) => onThemeChange(event.target.value)}><option value="light">Light · warm paper</option><option value="dark">Dark · forest night</option></select></label><button type="button" className="text-button" onClick={onReopenOnboarding}>Reopen getting started guide <ArrowRight size={15} /></button></div></section><section className="settings-section"><div className="section-heading"><div><h2>Your data</h2><p>Save a copy of your Budgetly records as JSON.</p></div></div><div className="settings-form"><p className="muted-text">The export downloads to this device and may contain sensitive financial information. Store it somewhere private.</p><button type="button" className="secondary-button" onClick={downloadExport} disabled={busy}>{busy ? "Preparing export…" : "Download my data"}</button></div></section></div><section className="delete-account-section"><h2>Delete account</h2><p>This permanently removes your Budgetly account and its associated records. Enter your password and type DELETE to continue.</p><form className="settings-form" onSubmit={deleteAccount}><PasswordInput label="Password" value={deleteForm.password} onChange={(value) => setDeleteForm({ ...deleteForm, password: value })} /><label className="field"><span>Type DELETE to confirm</span><input value={deleteForm.confirmation} onChange={(e) => setDeleteForm({ ...deleteForm, confirmation: e.target.value })} required /></label><button className="danger-button" disabled={busy || deleteForm.confirmation !== "DELETE"}>Delete account and records</button></form></section></div>;
+
+  async function saveProfile(event) {
+    event.preventDefault();const submitted = event.currentTarget;start("profile");
+    try { const updated = await api("/api/auth/profile/", { method: "PATCH", body: jsonBody({ first_name: form.first_name, last_name: form.last_name, email: form.email }) });onProfileChange(updated);setNotice("Profile updated."); }
+    catch (error) { showFailure(error, "profile", submitted); } finally { setBusy(false); }
+  }
+  async function changePassword(event) {
+    event.preventDefault();const submitted = event.currentTarget;start("password");
+    try { await api("/api/auth/change-password/", { method: "POST", body: jsonBody(password) });setPassword({ old_password: "", new_password: "", confirm_password: "" });setNotice("Password changed."); }
+    catch (error) { showFailure(error, "password", submitted); } finally { setBusy(false); }
+  }
+  async function deleteAccount(event) {
+    event.preventDefault();if (deleteForm.confirmation !== "DELETE") return;const submitted = event.currentTarget;start("deleteAccount");
+    try { await api("/api/auth/delete-account/", { method: "DELETE", body: jsonBody({ password: deleteForm.password }) });sessionStorage.removeItem("budgetly.access");sessionStorage.removeItem("budgetly.refresh");onLogout("/logout"); }
+    catch (error) { showFailure(error, "deleteAccount", submitted); } finally { setBusy(false); }
+  }
+  return <div className="page-content">
+    <div className="page-intro"><div><h1>Settings</h1><p className="muted-text">Manage the personal details and sign-in credentials on your account.</p></div></div>
+    {notice && <p className="inline-notice" role="status"><Check size={16} />{notice}</p>}
+    <div className="settings-grid">
+      <section className="settings-section"><div className="section-heading"><div><h2>Personal details</h2><p>Your profile information</p></div></div>
+        <form className="settings-form" onSubmit={saveProfile} onInvalid={event => invalid(event, "profile")}>
+          {feedback("profile")}
+          <SettingsField label="Username" name="username" value={form.username} disabled />
+          <div className="form-row">{["first_name", "last_name"].map(name => <SettingsField key={name} label={fields.profile[name]} name={name} value={form[name]} error={fieldError("profile", name)} onChange={value => { setForm({ ...form, [name]: value });clear("profile", name); }} />)}</div>
+          <SettingsField label="Email address" name="email" type="email" required value={form.email} error={fieldError("profile", "email")} onChange={value => { setForm({ ...form, email: value });clear("profile", "email"); }} />
+          <LoadingButton className="primary-button" busy={busy && pendingAction === "profile"} disabled={busy} loadingLabel="Saving profile…">Save profile</LoadingButton>
+        </form>
+      </section>
+      <section className="settings-section"><div className="section-heading"><div><h2>Password &amp; security</h2><p>Change a known password or reset one you’ve forgotten.</p></div></div>
+        <form className="settings-form" onSubmit={changePassword} onInvalid={event => invalid(event, "password")}>
+          {feedback("password")}
+          {Object.keys(fields.password).map(name => <PasswordInput key={name} label={fields.password[name]} name={name} value={password[name]} error={fieldError("password", name)} onChange={value => { setPassword({ ...password, [name]: value });clear("password", name); }} />)}
+          <LoadingButton className="secondary-button" busy={busy && pendingAction === "password"} disabled={busy} loadingLabel="Updating password…">Update password</LoadingButton>
+        </form>
+        <button className="settings-reset-link" type="button" onClick={() => navigate("/forgot-password")}>Forgot your password? Reset it <ArrowRight size={15} /></button>
+        <GoogleAccountLink key={profile?.id} profile={profile} theme={theme} busy={busy} logoutBusy={logoutBusy} onBusyChange={active => { setBusy(active);if (active) setPendingAction("google"); }} />
+        <div className="settings-session"><h3>Session</h3><p>The app stores this session’s tokens in this browser tab. Signing out sends the refresh token to Budgetly’s revocation endpoint.</p><LoadingButton className="text-button danger-text" announce={false} busy={logoutBusy} loadingLabel="Signing out…" onClick={() => onLogout("/logout")}>Sign out <ArrowRight size={15} /></LoadingButton></div>
+      </section>
+      <section className="settings-section"><div className="section-heading"><div><h2>Appearance</h2><p>Choose how Budgetly looks on this device.</p></div></div><div className="settings-form"><label className="field"><span>Theme</span><select value={theme} onChange={event => onThemeChange(event.target.value)}><option value="light">Light · luminous mist</option><option value="dark">Dark · midnight blue</option></select></label><button type="button" className="text-button" onClick={onReopenOnboarding}>Reopen getting started guide <ArrowRight size={15} /></button></div></section>
+      <section className="settings-section"><div className="section-heading"><div><h2>Your data</h2><p>Save a copy of your Budgetly records as JSON.</p></div></div><div className="settings-form"><p className="muted-text">The export downloads to this device and may contain sensitive financial information. Store it somewhere private.</p>{feedback("export")}<LoadingButton type="button" className="secondary-button" onClick={downloadExport} busy={busy && pendingAction === "export"} disabled={busy} loadingLabel="Preparing export…">Download my data</LoadingButton></div></section>
+    </div>
+    <section className="delete-account-section"><h2>Delete account</h2><p>This permanently removes your Budgetly account and its associated records. Enter your password and type DELETE to continue.</p>
+      <form className="settings-form" onSubmit={deleteAccount} onInvalid={event => invalid(event, "deleteAccount")}>
+        {feedback("deleteAccount")}
+        <PasswordInput label="Password" name="password" value={deleteForm.password} error={fieldError("deleteAccount", "password")} onChange={value => { setDeleteForm({ ...deleteForm, password: value });clear("deleteAccount", "password"); }} />
+        <SettingsField label="Type DELETE to confirm" name="confirmation" value={deleteForm.confirmation} onChange={value => setDeleteForm({ ...deleteForm, confirmation: value })} required />
+        <LoadingButton className="danger-button" busy={busy && pendingAction === "delete"} disabled={busy || deleteForm.confirmation !== "DELETE"} loadingLabel="Deleting account…">Delete account and records</LoadingButton>
+      </form>
+    </section>
+  </div>;
+}
+
+function SettingsField({ label, name, value, onChange, error, type = "text", ...props }) {
+  const id = `settings-${name}-error`;
+  return <label className="field"><span>{label}</span><input {...props} name={name} type={type} value={value} onChange={onChange ? event => onChange(event.target.value) : undefined} aria-invalid={error ? true : undefined} aria-describedby={error ? id : undefined} /><FieldError id={id} message={error} /></label>;
 }
 
 async function fetchAllPages(path) {
@@ -546,7 +775,7 @@ async function fetchAllPages(path) {
   return records;
 }
 
-function PasswordInput({ label, value, onChange }) { return <label className="field"><span>{label}</span><input type="password" minLength={8} required={label !== "Current password"} value={value} onChange={(e) => onChange(e.target.value)} autoComplete="new-password" /></label>; }
+function PasswordInput({ label, name, value, onChange, error }) { return <SettingsField label={label} name={name} value={value} onChange={onChange} error={error} type="password" minLength={8} required={label !== "Current password"} autoComplete={name === "old_password" || name === "password" ? "current-password" : "new-password"} />; }
 
 function Modal({ title, onClose, children }) {
   const panel = useRef(null);
@@ -572,7 +801,6 @@ function Modal({ title, onClose, children }) {
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section ref={panel} className="modal-dialog" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="modal-title"><header className="modal-header"><h2 id="modal-title">{title}</h2><button className="icon-button" aria-label="Close dialog" onClick={onClose}><X size={18} /></button></header>{children}</section></div>;
 }
 function Status({ value }) { return <span className={`status status-${value}`}>{titleCase(value)}</span>; }
-function LoadingState({ label }) { return <div className="loading-state"><LoaderCircle size={19} className="spin" /><span>{label}…</span></div>; }
 function ErrorState({ error, retry, compact = false }) { return <div className={`error-state ${compact ? "compact" : ""}`} role="alert"><strong>We couldn’t load this information.</strong><p>{error}</p><button className="secondary-button" onClick={retry}>Try again</button></div>; }
 function EmptyState({ title, copy, action, onClick, icon: Icon = Wallet }) { return <div className="empty-state"><span className="empty-mark"><Icon size={20} /></span><h2>{title}</h2><p>{copy}</p>{action && <button className="secondary-button" onClick={onClick}>{action}<ArrowRight size={15} /></button>}</div>; }
 function loanInterestFormState(loan) {

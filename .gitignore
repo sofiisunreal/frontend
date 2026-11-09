@@ -22,3 +22,46 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local Taste screenshots, browser QA output and draw history
+.taste-skill/before/
+.taste-skill/after-*/
+.taste-skill/qa/screens/
+.taste-skill/qa/results.json
+.taste-skill/history.json
+
+# Local payment fixtures, screenshots and enforcement-only verification build.
+.taste-skill/paystack-integration/enforced-dist/
+.taste-skill/paystack-integration/screens/
+.taste-skill/paystack-integration/chrome/
+.taste-skill/error-ux/screens/
+.taste-skill/google-auth/enforced-dist/
+.taste-skill/google-auth/screens/
+.taste-skill/paid-journey/enforced-dist/
+.taste-skill/paid-journey/screens/
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Codex development artifacts
+.taste-skill/
+.agents/
+design-explorations/
+
+# Temporary test artifacts
+coverage/
+playwright-report/
+test-results/
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Local development artifacts
+.taste-skill/
+.agents/
+design-explorations/
+coverage/
+playwright-report/
+test-results/

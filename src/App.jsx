@@ -1,27 +1,43 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Menu, Moon, Sun } from "lucide-react";
 import Sidebar from "./components/Sidebar";
+import { StartupLoading } from "./components/Loading";
 import AuthPage from "./pages/AuthPage";
+import LandingPage from "./pages/LandingPage";
 import FinancePage from "./pages/FinancePage";
 import LegalDraftPage from "./pages/LegalDraftPage";
+import AccountLegalProvider from "./components/legal/AccountLegalProvider";
+import LegalUpdateNotice from "./components/legal/LegalUpdateNotice";
 import { api } from "./lib/api";
+import { disableGoogleAutoSelect } from "./lib/googleIdentity";
+import { getAccessStatus } from "./lib/billingApi";
+import { clearPendingPurchaseReference, hasLifetimeAccess, paymentReturnReference, pendingPurchaseReference, rememberPurchaseReference, validateAccessStatus } from "./lib/billingState.js";
+import { PaymentAccessLoading, PaymentCompletePage, PaymentRequiredPage } from "./pages/PaymentPages";
 import "./index.css";
+import "./styles/orbit-theme.css";
+import "./styles/orbit-support.css";
+import "./styles/orbit-loading.css";
 
 const routeScreens = {
   "/": "Overview", "/transactions": "Transactions", "/accounts": "Accounts", "/transfers": "Transfers",
   "/budgets": "Budgets & Savings", "/savings": "Savings goals", "/loans": "Loans",
   "/categories": "Categories", "/exchange-rates": "Exchange rates", "/settings": "Settings", "/help": "Help",
-  "/privacy-policy": "Privacy policy", "/terms-of-service": "Terms of service",
+  "/privacy-policy": "Privacy policy", "/terms-of-service": "Terms of service", "/legal-updates": "Legal updates",
 };
 const routePaths = Object.fromEntries(Object.entries(routeScreens).map(([path, screen]) => [screen, path]));
 const authRoutes = new Set(["/login", "/register", "/forgot-password"]);
 const currentPath = () => `${window.location.pathname}${window.location.search}`;
+const paymentEnforcementEnabled = import.meta.env.VITE_ENFORCE_LIFETIME_ACCESS === "true";
 
 export default function App() {
   const [path, setPath] = useState(currentPath);
   const [profile, setProfile] = useState(null);
   const [sessionState, setSessionState] = useState(() => sessionStorage.getItem("budgetly.access") ? "checking" : "signed-out");
+  const [access, setAccess] = useState({ state: "idle", data: null });
+  const accessRequest = useRef(0), billingOwner = useRef(null), deniedOwner = useRef(null);
+  const [serverPaymentRequired, setServerPaymentRequired] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("budgetly.sidebarCollapsed") === "true");
   const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || localStorage.getItem("budgetly.theme") || "light");
 
@@ -33,52 +49,132 @@ export default function App() {
   useEffect(() => {
     const sync = () => setPath(currentPath());
     window.addEventListener("popstate", sync);
-    const expired = () => { setProfile(null); setSessionState("signed-out"); };
+    const expired = () => {
+      // A stale JWT can expire before the callback page mounts. Preserve only
+      // its validated reference so login can resume server-side verification.
+      if (window.location.pathname === "/payment/complete") {
+        const reference = paymentReturnReference(currentPath());
+        if (reference) rememberPurchaseReference(reference, billingOwner.current ?? undefined);
+      }
+      accessRequest.current += 1;billingOwner.current = null;deniedOwner.current = null;setServerPaymentRequired(false);
+      setProfile(null); setAccess({ state: "idle", data: null });setSessionState("signed-out");
+      window.history.replaceState({}, "", "/login?session=expired"); setPath(currentPath());
+    };
     window.addEventListener("budgetly:unauthorized", expired);
     return () => { window.removeEventListener("popstate", sync); window.removeEventListener("budgetly:unauthorized", expired); };
+  }, []);
+
+  const refreshAccess = useCallback(async () => {
+    const request = ++accessRequest.current, owner = billingOwner.current;
+    setAccess({ state: "checking", data: null });
+    try {
+      const data = await getAccessStatus();
+      if (request !== accessRequest.current || owner !== billingOwner.current) return null;
+      setAccess({ state: "ready", data });
+      if (hasLifetimeAccess(data)) { deniedOwner.current = null;setServerPaymentRequired(false); }
+      return data;
+    } catch {
+      if (request === accessRequest.current && owner === billingOwner.current) setAccess({ state: "unavailable", data: null });
+      return null;
+    }
   }, []);
 
   useEffect(() => {
     if (!sessionStorage.getItem("budgetly.access")) return;
     let cancelled = false;
     api("/api/auth/profile/").then((user) => {
-      if (!cancelled) { setProfile(user); setSessionState("signed-in"); }
+      if (!cancelled) { billingOwner.current = user.id;setProfile(user); setSessionState("signed-in"); refreshAccess(); }
     }).catch(() => {
       sessionStorage.removeItem("budgetly.access");
       sessionStorage.removeItem("budgetly.refresh");
       if (!cancelled) { setProfile(null); setSessionState("signed-out"); }
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshAccess]);
 
-  const navigate = useCallback(async (destination) => {
+  const navigate = useCallback(async (destination, { replace = false } = {}) => {
     if (destination === "/logout") {
+      disableGoogleAutoSelect();
+      setSigningOut(true);
       const refresh = sessionStorage.getItem("budgetly.refresh");
       try { if (refresh) await api("/api/auth/logout/", { method: "POST", body: JSON.stringify({ refresh }) }); } catch { /* Clear this browser session even if the service is unavailable. */ }
       sessionStorage.removeItem("budgetly.access"); sessionStorage.removeItem("budgetly.refresh");
-      setProfile(null); setSessionState("signed-out"); destination = "/login";
+      accessRequest.current += 1;billingOwner.current = null;deniedOwner.current = null;setServerPaymentRequired(false);clearPendingPurchaseReference();
+      setProfile(null); setAccess({ state: "idle", data: null }); setSessionState("signed-out"); setSigningOut(false); destination = "/login";
     }
-    window.history.pushState({}, "", destination);
+    window.history[replace ? "replaceState" : "pushState"]({}, "", destination);
     setPath(currentPath()); setSidebarOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }, []);
 
   const pathname = path.split("?")[0].replace(/\/$/, "") || "/";
   const query = new URLSearchParams(path.split("?")[1] || "");
   const isAuthPath = authRoutes.has(pathname) || pathname.startsWith("/reset-password/");
   const isRecoveryPath = pathname === "/forgot-password" || pathname.startsWith("/reset-password/");
-  const isPublicDocument = pathname === "/privacy-policy" || pathname === "/terms-of-service";
+  const isPublicDocument = ["/privacy-policy", "/terms-of-service", "/legal-updates"].includes(pathname);
+  const isLandingPath = pathname === "/welcome" || (pathname === "/" && sessionState !== "signed-in");
+  const isPaymentCompletePath = pathname === "/payment/complete";
+  const isPaymentRequiredPath = pathname === "/payment-required";
+  const accountManagement = pathname === "/settings" || pathname === "/help";
+  const billingBypass = isPublicDocument || isLandingPath || isRecoveryPath || isPaymentRequiredPath || isPaymentCompletePath || accountManagement;
+  const confirmedAccess = access.state === "ready" && hasLifetimeAccess(access.data);
+  const enforceAccess = paymentEnforcementEnabled || serverPaymentRequired;
+  const resumeReference = pendingPurchaseReference(profile?.id);
+  const authPaymentDestination = resumeReference ? `/payment/complete?reference=${encodeURIComponent(resumeReference)}` : query.get("returnTo") === "payment-required" ? "/payment-required" : null;
+  const authDestination = authPaymentDestination || (query.get("linkGoogle") === "1" ? "/settings?connectGoogle=1" : null);
+
+  const completeAuthentication = useCallback((user) => {
+    deniedOwner.current = null;setServerPaymentRequired(false);
+    billingOwner.current = user.id;
+    setProfile(user); setSessionState("signed-in");
+    refreshAccess();
+  }, [refreshAccess]);
+
+  const paymentAccessChecked = useCallback((data, owner) => {
+    if (owner !== billingOwner.current) return;
+    const validated = validateAccessStatus(data);
+    accessRequest.current += 1;setAccess({ state: "ready", data: validated });
+    if (hasLifetimeAccess(validated)) { deniedOwner.current = null;setServerPaymentRequired(false); }
+  }, []);
 
   useEffect(() => {
-    if (sessionState === "signed-out" && !isAuthPath && !isPublicDocument) window.history.replaceState({}, "", "/login");
-    if (sessionState === "signed-in" && isAuthPath && !isRecoveryPath) {
-      window.history.replaceState({}, "", "/");
-    }
-  }, [sessionState, isAuthPath, isRecoveryPath, isPublicDocument]);
+    const paymentRequired = () => {
+      const owner = billingOwner.current;
+      if (owner == null || deniedOwner.current === owner) return;
+      deniedOwner.current = owner;setServerPaymentRequired(true);
+      const route = window.location.pathname.replace(/\/$/, "") || "/";
+      const recoveryRoute = ["/welcome", "/settings", "/help", "/privacy-policy", "/terms-of-service", "/legal-updates", "/payment-required", "/payment/complete"].includes(route) || authRoutes.has(route) || route.startsWith("/reset-password/");
+      if (!recoveryRoute) navigate("/payment-required", { replace: true });
+      refreshAccess();
+    };
+    window.addEventListener("budgetly:payment-required", paymentRequired);
+    return () => window.removeEventListener("budgetly:payment-required", paymentRequired);
+  }, [navigate, refreshAccess]);
 
-  if (sessionState === "checking") return <div className="session-loading"><span className="brand-mark">B</span><p>Opening your workspace…</p></div>;
-  if (sessionState === "signed-out" && isPublicDocument) return <LegalDraftPage path={pathname} navigate={navigate} />;
-  if (sessionState === "signed-out" || isRecoveryPath) return <AuthPage key={pathname} path={isAuthPath ? path : "/login"} navigate={navigate} onAuthenticated={(user) => { setProfile(user); setSessionState("signed-in"); navigate("/"); }} onSessionCleared={() => { sessionStorage.removeItem("budgetly.access"); sessionStorage.removeItem("budgetly.refresh"); setProfile(null); setSessionState("signed-out"); }} />;
+  useEffect(() => {
+    let destination;
+    if (sessionState === "signed-out" && !isAuthPath && !isPublicDocument && !isLandingPath && !isPaymentCompletePath) destination = isPaymentRequiredPath ? "/login?returnTo=payment-required" : "/login";
+    else if (sessionState === "signed-in" && isAuthPath && !isRecoveryPath) {
+      // With enforcement off, billing outages must not delay existing users.
+      if (!enforceAccess || authDestination || ["ready", "unavailable"].includes(access.state)) destination = authDestination || (enforceAccess && !confirmedAccess ? "/payment-required" : "/");
+    }
+    else if (sessionState === "signed-in" && enforceAccess && !billingBypass && !isAuthPath && ["ready", "unavailable"].includes(access.state) && !confirmedAccess) destination = "/payment-required";
+    if (!destination) return;
+    // URL synchronization follows the guarded render. Protected content is
+    // never mounted while the future payment gate is deciding access.
+    let current = true;
+    queueMicrotask(() => { if (current) navigate(destination, { replace: true }); });
+    return () => { current = false; };
+  }, [sessionState, isAuthPath, isRecoveryPath, isPublicDocument, isLandingPath, isPaymentCompletePath, isPaymentRequiredPath, billingBypass, access.state, confirmedAccess, authDestination, enforceAccess, navigate]);
+
+  if (sessionState === "checking") return <StartupLoading />;
+  if (isLandingPath) return <LandingPage navigate={navigate} theme={theme} onThemeChange={setTheme} />;
+  if (sessionState === "signed-out" && isPublicDocument) return <LegalDraftPage path={path} navigate={navigate} theme={theme} onThemeChange={setTheme} />;
+  if (isPaymentCompletePath) return <PaymentCompletePage key={`${profile?.id || "signed-out"}:${query.get("reference") || "missing"}`} path={path} profile={profile} isAuthenticated={sessionState === "signed-in"} onAccessChecked={paymentAccessChecked} navigate={navigate} theme={theme} onThemeChange={setTheme} />;
+  if (sessionState === "signed-out" || isRecoveryPath) return <AuthPage key={pathname} path={isAuthPath ? path : "/login"} theme={theme} onThemeChange={setTheme} navigate={navigate} onAuthenticated={completeAuthentication} onSessionCleared={() => { sessionStorage.removeItem("budgetly.access"); sessionStorage.removeItem("budgetly.refresh"); accessRequest.current += 1;billingOwner.current = null;deniedOwner.current = null;setServerPaymentRequired(false);setProfile(null); setAccess({ state: "idle", data: null }); setSessionState("signed-out"); }} />;
+  if (isAuthPath) return <StartupLoading />;
+  if (isPaymentRequiredPath || (enforceAccess && !billingBypass && !confirmedAccess && access.state === "unavailable")) return <PaymentRequiredPage profile={profile} access={access} onRefreshAccess={refreshAccess} navigate={navigate} theme={theme} onThemeChange={setTheme} />;
+  if (enforceAccess && !billingBypass && !confirmedAccess) return access.state === "ready" ? <PaymentRequiredPage profile={profile} access={access} onRefreshAccess={refreshAccess} navigate={navigate} theme={theme} onThemeChange={setTheme} /> : <PaymentAccessLoading navigate={navigate} theme={theme} onThemeChange={setTheme} />;
 
   const screen = routeScreens[sessionState === "signed-in" && isAuthPath && !isRecoveryPath ? "/" : pathname] || "";
   const title = `${profile?.first_name || profile?.username || "My account"}`;
@@ -86,17 +182,21 @@ export default function App() {
     if (profile?.id) {
       localStorage.removeItem(`budgetly.onboarding.hidden.${profile.id}`);
       localStorage.removeItem(`budgetly.onboarding.complete.${profile.id}`);
+      localStorage.setItem(`budgetly.onboarding.reopen.${profile.id}`, "true");
     }
     navigate("/");
   };
-  return <div className={`app-shell ${sidebarCollapsed ? "app-shell-collapsed" : ""}`}>
-    <Sidebar activePage={screen} onNavigate={(destination) => navigate(routePaths[destination] || "/")} open={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={() => navigate("/logout")} profile={profile} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((current) => { const next = !current; localStorage.setItem("budgetly.sidebarCollapsed", String(next)); return next; })} />
-    <main className="main-area">
+  return <AccountLegalProvider key={profile?.id}><div className={`app-shell ${screen === "Overview" ? "app-shell-orbit" : ""} ${sidebarCollapsed ? "app-shell-collapsed" : ""}`}>
+    <a className="skip-link" href="#main-content">Skip to content</a>
+    <span className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">{signingOut ? "Signing out…" : ""}</span>
+    <Sidebar orbit signingOut={signingOut} activePage={screen} onNavigate={(destination) => navigate(routePaths[destination] || "/")} open={sidebarOpen} onClose={() => setSidebarOpen(false)} onLogout={() => navigate("/logout")} profile={profile} collapsed={sidebarCollapsed} onToggleCollapse={() => setSidebarCollapsed((current) => { const next = !current; localStorage.setItem("budgetly.sidebarCollapsed", String(next)); return next; })} />
+    <main id="main-content" className="main-area" tabIndex={-1} inert={sidebarOpen ? true : undefined}>
       <header className="topbar">
-        <div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={sidebarOpen} aria-controls="budgetly-sidebar" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button><div className="breadcrumb"><span>Workspace</span><span className="breadcrumb-slash">/</span><strong>{screen || "Not found"}</strong></div></div>
-        <div className="topbar-actions"><button className="icon-button theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button><button className="topbar-profile" onClick={() => navigate("/settings")}><span className="topbar-avatar">{(profile?.first_name || profile?.username || "B").slice(0, 1).toUpperCase()}</span><span className="topbar-user"><strong>{title}</strong><small>Personal account</small></span><ArrowRight size={15} /></button></div>
+        <div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={sidebarOpen} aria-controls="budgetly-sidebar" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button><span className="workspace-label"><span className="workspace-desktop">Personal workspace</span><span className="workspace-mobile">Budgetly · {screen || "Not found"}</span></span></div>
+        <div className="topbar-actions"><button className="icon-button theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button><button className="topbar-profile" aria-label={`${title}, open settings`} onClick={() => navigate("/settings")}><span className="topbar-avatar">{(profile?.first_name || profile?.username || "B").slice(0, 1).toUpperCase()}</span><span className="topbar-user"><strong>{title}</strong><small>Personal account</small></span><ArrowRight size={15} /></button></div>
       </header>
-      {screen ? <FinancePage key={screen} screen={screen} initialAction={query.get("new")} profile={profile} theme={theme} onThemeChange={setTheme} onProfileChange={setProfile} onReopenOnboarding={reopenOnboarding} navigate={navigate} /> : <section className="page-content not-found"><h1>That page isn’t here.</h1><p className="muted-text">The address may have changed, or the page may not exist.</p><button className="primary-button" onClick={() => navigate("/")}>Back to overview <ArrowRight size={15} /></button></section>}
+      <LegalUpdateNotice navigate={navigate} screen={screen} />
+      {screen ? <FinancePage key={screen} logoutBusy={signingOut} screen={screen} initialAction={query.get("new")} profile={profile} theme={theme} onThemeChange={setTheme} onProfileChange={setProfile} onReopenOnboarding={reopenOnboarding} navigate={navigate} /> : <section className="page-content not-found"><h1>That page isn’t here.</h1><p className="muted-text">The address may have changed, or the page may not exist.</p><button className="primary-button" onClick={() => navigate("/")}>Back to overview <ArrowRight size={15} /></button></section>}
     </main>
-  </div>;
+  </div></AccountLegalProvider>;
 }

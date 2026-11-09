@@ -1,0 +1,68 @@
+/* Static product transitions. Only presentation layers enter the fades. */
+:root .orbit-landing .hero.hero-cinematic { height:auto;min-height:100svh;background:transparent; }
+:root .orbit-landing .cinema-background, :root .orbit-landing .cinema-shade {
+  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 200px),transparent 100%);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - 200px),transparent 100%);
+}
+:root .orbit-landing .cinema-preview {
+  position:relative;top:auto;left:auto;transform:none;margin:clamp(80px,calc(100svh - 767px),160px) auto 0;
+}
+:root .orbit-landing .hero-cinematic .hero-product {
+  --teaser-tail-height:112px;
+  --teaser-fade-depth:calc(var(--teaser-tail-height) + 18px);
+  min-height:0;
+  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - var(--teaser-fade-depth)),#000000DB calc(100% - 80px),#00000038 calc(100% - 28px),transparent 100%);
+  mask-image:linear-gradient(to bottom,#000 calc(100% - var(--teaser-fade-depth)),#000000DB calc(100% - 80px),#00000038 calc(100% - 28px),transparent 100%);
+}
+:root .orbit-landing .app-teaser-tail { display:grid;grid-template-columns:4fr 8fr;gap:14px;height:var(--teaser-tail-height);margin-top:16px;pointer-events:none; }
+:root .orbit-landing .app-teaser-tail > div { min-width:0;overflow:hidden;padding:18px;border-radius:16px;background:var(--ui-surface); }
+:root .orbit-landing .app-teaser-caption { display:block;width:44%;height:6px;border-radius:4px;background:var(--ui-line); }
+:root .orbit-landing .app-teaser-ring { width:88px;height:88px;margin:16px auto 0; }
+:root .orbit-landing .app-teaser-ring svg { width:100%;height:100%;transform:rotate(-90deg);stroke-width:18;overflow:visible; }
+:root .orbit-landing .app-teaser-activity > div { display:grid;grid-template-columns:24px 1fr 56px;align-items:center;gap:14px;height:39px; }
+:root .orbit-landing .app-teaser-activity i { width:22px;height:22px;border-radius:7px;background:var(--ui-line); }
+:root .orbit-landing .app-teaser-activity span { height:5px;width:65%;border-radius:4px;background:var(--ui-line); }
+:root .orbit-landing .app-teaser-activity span:last-child { width:100%; }
+
+/* Let the full account composition determine section height on shorter displays. */
+:root .orbit-landing .accounts-section { height:auto;min-height:0;background:none; }
+:root .orbit-landing .accounts-section .currency-ledger {
+  isolation:isolate;background:transparent;border-color:transparent;box-shadow:none;
+}
+:root .orbit-landing .accounts-section .currency-ledger::before {
+  content:"";position:absolute;inset:0;z-index:-1;border:1px solid var(--glass-border);border-radius:inherit;background:var(--public-feature);box-shadow:inset 0 1px 0 var(--public-highlight);pointer-events:none;
+  -webkit-mask-image:linear-gradient(to bottom,#000 38%,#000000EB 65%,#00000080 85%,transparent 100%);
+  mask-image:linear-gradient(to bottom,#000 38%,#000000EB 65%,#00000080 85%,transparent 100%);
+}
+:root .orbit-landing .accounts-section .ledger-usd::before { background:var(--public-lavender); }
+:root .orbit-landing .accounts-section .ledger-watermark {
+  -webkit-mask-image:linear-gradient(135deg,#000 20%,#00000080 65%,transparent 100%);
+  mask-image:linear-gradient(135deg,#000 20%,#00000080 65%,transparent 100%);
+}
+:root .orbit-landing .accounts-section .account-list.glass {
+  isolation:isolate;background:transparent;border-color:transparent;box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;
+}
+:root .orbit-landing .accounts-section .account-list::before {
+  content:"";position:absolute;inset:0;z-index:-1;border:1px solid var(--glass-border);border-radius:inherit;background:var(--glass-surface);box-shadow:inset 0 1px 0 var(--public-highlight);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);pointer-events:none;
+  -webkit-mask-image:linear-gradient(to bottom,#000 60%,#000000F0 80%,#00000080 94%,transparent 100%);
+  mask-image:linear-gradient(to bottom,#000 60%,#000000F0 80%,#00000080 94%,transparent 100%);
+}
+
+@media(min-width:1024px) and (max-height:800px) { :root .orbit-landing .cinema-preview { margin-top:clamp(96px,calc(100svh - 652px),160px); } }
+@media(max-width:1023px) { :root .orbit-landing .cinema-preview { margin-top:clamp(130px,calc(100svh - 774px),260px); } }
+@media(max-width:639px) {
+  :root .orbit-landing .cinema-preview { margin-top:clamp(140px,calc(100svh - 653px),200px); }
+  :root .orbit-landing .hero-cinematic .hero-product { --teaser-tail-height:88px; }
+  :root .orbit-landing .app-teaser-tail { gap:10px;margin-top:14px;grid-template-columns:5fr 7fr; }
+  :root .orbit-landing .app-teaser-tail > div { padding:14px;border-radius:13px; }
+  :root .orbit-landing .app-teaser-ring { width:68px;height:68px;margin-top:12px; }
+  :root .orbit-landing .app-teaser-activity > div { grid-template-columns:18px 1fr;gap:10px;height:32px; }
+  :root .orbit-landing .app-teaser-activity span:last-child { display:none; }
+  :root .orbit-landing .app-teaser-activity i { width:18px;height:18px;border-radius:6px; }
+}
+@media(prefers-reduced-transparency:reduce) { :root .orbit-landing .accounts-section .account-list::before { background:var(--public-menu);-webkit-backdrop-filter:none;backdrop-filter:none; } }
+@supports not (backdrop-filter:blur(1px)) { :root .orbit-landing .accounts-section .account-list::before { background:var(--public-menu); } }
+@supports not ((mask-image:linear-gradient(#000,transparent)) or (-webkit-mask-image:linear-gradient(#000,transparent))) {
+  :root .orbit-landing .app-teaser-tail { display:none; }
+  :root .orbit-landing .accounts-section .currency-ledger::before,:root .orbit-landing .accounts-section .account-list::before { opacity:.9; }
+}

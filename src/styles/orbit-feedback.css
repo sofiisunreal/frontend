@@ -1,0 +1,12 @@
+/* Quiet, readable feedback within the approved Orbit surfaces. */
+.orbit-error-notice { display:flex;align-items:flex-start;gap:10px;text-align:left;line-height:1.65;overflow-wrap:anywhere; }
+.orbit-error-notice>svg { flex:none;margin-top:2px; }
+.orbit-error-notice>div { min-width:0; }
+.orbit-error-notice p { margin:0; }
+.orbit-error-notice ul { margin:6px 0 0;padding-left:18px; }
+.orbit-error-notice:focus-visible { outline:2px solid var(--color-focus,#7198DE);outline-offset:3px; }
+.orbit-field-error { display:block;font-size:12px;font-weight:450;line-height:1.55;color:var(--color-error-ink,#A32D42);overflow-wrap:anywhere; }
+.field [aria-invalid="true"],.password-input:has(input[aria-invalid="true"]) { border-color:var(--color-error-ink,#A32D42); }
+.settings-form>.orbit-error-notice,.resource-form>.orbit-error-notice,.feedback-form>.orbit-error-notice { grid-column:1/-1; }
+.field:has(.orbit-field-error) { gap:6px; }
+@media(prefers-reduced-motion:reduce) { .orbit-error-notice { scroll-behavior:auto; } }

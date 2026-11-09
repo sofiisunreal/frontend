@@ -1,0 +1,7 @@
+/* A quiet offer disclosure inside the approved compositions, not a pricing section. */
+.lifetime-offer-note { display:grid;gap:4px;font-size:12px;line-height:1.6;letter-spacing:0; }
+.lifetime-offer-note strong { font-weight:600; }
+:root .orbit-landing .cinema-copy .lifetime-offer-note { margin:18px 0 0;max-width:none;font-size:12px;line-height:1.6;letter-spacing:0;color:var(--public-copy); }
+:root .orbit-landing .closing-head .lifetime-offer-note { margin:0 0 18px;color:var(--ink-soft);font-size:12px;line-height:1.6; }
+.orbit-auth .auth-price-note { margin:10px 0 0;text-align:center;color:var(--ink-soft);font-size:11px;line-height:1.6; }
+@media(max-width:480px) { :root .orbit-landing .cinema-copy .lifetime-offer-note { font-size:12px;margin-top:16px; } }

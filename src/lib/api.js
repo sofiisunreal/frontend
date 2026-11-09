@@ -1,3 +1,5 @@
+import { errorDiagnostic, friendlyErrorMessage, normalizeError } from "./errors.js";
+
 const configuredBase = import.meta.env.VITE_API_BASE_URL || "https://budgetly.alwaysdata.net/api";
 const API_BASE = configuredBase.replace(/\/$/, "");
 
@@ -20,15 +22,10 @@ export class ApiError extends Error {
   }
 }
 
-function messageFrom(data, fallback) {
-  if (typeof data === "string") return data;
-  if (data?.detail) return String(data.detail);
-  if (data?.error) return String(data.error);
-  if (data && typeof data === "object") {
-    const first = Object.values(data).flat(Infinity).find((value) => typeof value === "string");
-    if (first) return first;
-  }
-  return fallback;
+function presentableError(error, method) {
+  error.message = normalizeError(error).message;
+  if (import.meta.env.DEV) console.debug("Budgetly request", errorDiagnostic(error, method));
+  return error;
 }
 
 async function refreshAccessToken() {
@@ -65,21 +62,34 @@ export async function api(path, options = {}, retry = true) {
     if (access) headers.set("Authorization", `Bearer ${access}`);
   }
   let response;
+  const connectionError = cause => {
+    const error = new ApiError("Request interrupted", 0);
+    error.transport = cause?.name === "TimeoutError" || requestOptions.signal?.reason?.name === "TimeoutError" ? "timeout" : cause?.name === "AbortError" ? "cancelled" : "network";
+    return presentableError(error, requestOptions.method);
+  };
   try {
     response = await fetch(url, { ...requestOptions, headers });
-  } catch {
-    throw new ApiError("Couldn't reach Budgetly. Check the connection and try again.", 0);
+  } catch (cause) {
+    throw connectionError(cause);
   }
   if (response.status === 401 && auth && retry) {
     const access = await refreshAccessToken();
     if (access) return api(path, options, false);
     window.dispatchEvent(new CustomEvent("budgetly:unauthorized"));
   }
-  const raw = await response.text();
+  let raw;
+  try { raw = await response.text(); } catch (cause) { throw connectionError(cause); }
   let data;
   try { data = raw ? JSON.parse(raw) : null; } catch { data = raw; }
   if (!response.ok) {
-    throw new ApiError(messageFrom(data, `Request failed (${response.status}).`), response.status, data);
+    // Honour the backend's financial-access decision without treating it as a
+    // JWT failure. Recovery APIs never emit this event, preventing redirect loops.
+    const recoveryEndpoint = /\/api\/(?:auth|billing|feedback)\//.test(url.pathname);
+    const currentAccess = sessionStorage.getItem("budgetly.access");
+    if (auth && response.status === 403 && data?.code === "payment_required" && !recoveryEndpoint && currentAccess && headers.get("Authorization") === `Bearer ${currentAccess}`) {
+      window.dispatchEvent(new CustomEvent("budgetly:payment-required"));
+    }
+    throw presentableError(new ApiError("Request unsuccessful", response.status, data), requestOptions.method);
   }
   return data;
 }
@@ -87,14 +97,7 @@ export async function api(path, options = {}, retry = true) {
 export const jsonBody = (value) => JSON.stringify(value);
 export const apiBaseUrl = API_BASE;
 
-export function formErrorMessage(error) {
-  if (error?.details && typeof error.details === "object") {
-    return Object.entries(error.details)
-      .map(([field, messages]) => `${field.replaceAll("_", " ")}: ${Array.isArray(messages) ? messages.join(" ") : messages}`)
-      .join(" · ");
-  }
-  return error?.message || "Something went wrong. Please try again.";
-}
+export const formErrorMessage = friendlyErrorMessage;
 
 export function asList(value) {
   if (Array.isArray(value)) return value;

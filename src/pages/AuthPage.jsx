@@ -18,7 +18,7 @@ import "../styles/orbit-pricing.css";
 
 const views = {
   "/login": { title: "Welcome back", intro: "Sign in to pick up where you left off.", submit: "Sign in" },
-  "/register": { title: "A clearer view of your money", intro: `Create your account, then unlock Budgetly for ${LIFETIME_PRICE_LABEL}. One payment, lifetime access.`, submit: "Create account" },
+  "/register": { title: "A clearer view of your money", intro: `Create your account, then unlock Budgetly for ${LIFETIME_PRICE_LABEL} once. Lifetime access lasts while Budgetly continues offering the service. This is not a subscription and has no recurring charges.`, submit: "Create account" },
   "/forgot-password": { title: "Reset your password", intro: "We’ll send instructions to the email on your account.", submit: "Send instructions" },
 };
 
@@ -207,7 +207,7 @@ export default function AuthPage({ path, navigate, onAuthenticated, onSessionSta
           <LoadingButton className="primary-button auth-submit" busy={busy} disabled={policyBlocked} loadingLabel={isRegister ? "Creating account…" : isForgot ? "Sending instructions…" : isReset ? "Resetting password…" : "Signing in…"} type="submit">{isReset ? "Save new password" : info.submit}<ArrowRight size={17} /></LoadingButton>
           {isReset && <button className="auth-recovery-link" type="button" onClick={() => navigate("/forgot-password")}>Request another reset link</button>}
           <p className="auth-switch">{isRegister ? "Already have an account?" : isForgot || isReset ? "Remembered your password?" : "New to Budgetly?"} <button type="button" onClick={() => navigate(isRegister || isForgot || isReset ? "/login" : "/register")}>{isRegister || isForgot || isReset ? "Sign in" : "Create an account"}</button></p>
-          {!isRegister && !isForgot && !isReset && <p className="auth-price-note">Lifetime access · {LIFETIME_PRICE_LABEL} once. No subscriptions.</p>}
+          {!isRegister && !isForgot && !isReset && <p className="auth-price-note">{LIFETIME_PRICE_LABEL} once. Lifetime access lasts while Budgetly continues offering the service. No subscription. No recurring charges.</p>}
         </form>
         {!isRegister && <PaymentSupport />}
         <footer className="auth-footer"><span>Personal finance, at your pace.</span><nav aria-label="Legal documents"><button type="button" onClick={() => navigate(policyLink("privacy", policies.documents?.privacy))}>Privacy policy{official ? ` · v${policies.documents.privacy.version}` : " · Draft"}</button><button type="button" onClick={() => navigate(policyLink("terms", policies.documents?.terms))}>Terms{official ? ` · v${policies.documents.terms.version}` : " · Draft"}</button></nav></footer>

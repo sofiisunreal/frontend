@@ -3,18 +3,20 @@ import test from 'node:test';
 import {createElement} from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {createServer} from 'vite';
+import {createHash} from 'node:crypto';
 import {profileDisplayName} from '../src/lib/profile.js';
 import {SUPPORT_EMAIL, SUPPORT_MAILTO} from '../src/lib/support.js';
 
 const user={id:900001,username:'google-internal-subject',email:'local@example.invalid',first_name:'Amina',last_name:'Wanjiru'};
 const noop=()=>{};
-let server,Sidebar,FinancePage,AuthPage,PaymentPages,PaymentSupport;
+let server,Sidebar,FinancePage,AuthPage,PaymentPages,PaymentSupport,LifetimeOfferNote,PolicyRecords,LegalPage;
 const storage=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
 test.before(async()=>{
  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:()=>null}});
  server=await createServer({server:{middlewareMode:true,hmr:false,watch:null},appType:'custom',logLevel:'silent'});
- [Sidebar,FinancePage,AuthPage,PaymentPages,PaymentSupport]=await Promise.all([
+ [Sidebar,FinancePage,AuthPage,PaymentPages,PaymentSupport,LifetimeOfferNote,PolicyRecords,LegalPage]=await Promise.all([
   '/src/components/Sidebar.jsx','/src/pages/FinancePage.jsx','/src/pages/AuthPage.jsx','/src/pages/PaymentPages.jsx','/src/components/PaymentSupport.jsx',
+  '/src/components/LifetimeOfferNote.jsx','/src/legal/policyRecords.js','/src/pages/LegalDraftPage.jsx',
  ].map(path=>server.ssrLoadModule(path)));
 });
 test.after(async()=>{await server?.close();if(storage)Object.defineProperty(globalThis,'localStorage',storage);else delete globalThis.localStorage;});
@@ -89,4 +91,31 @@ test('payment offer, unresolved access and signed-out completion all expose the 
   const html=render(PaymentPages.PaymentCompletePage,{...common,path,isAuthenticated:false});contact(html);
   assert(!html.includes('Go to Dashboard'));
  }
+});
+
+test('lifetime offers define service duration, preserve the one-time price and exclude recurring billing',()=>{
+ const offer=render(PaymentPages.PaymentRequiredPage,{profile:user,navigate:noop,access:{state:'ready',data:{has_lifetime_access:false,purchase_required:true,entitlement_status:null}}});
+ for(const html of [offer,render(LifetimeOfferNote.default),render(AuthPage.default,{path:'/login',navigate:noop}),render(AuthPage.default,{path:'/register',navigate:noop})]){
+  assert(html.includes('KES 1,050'));assert(html.includes('once')||html.includes('One payment'));
+  assert.match(html,/while Budgetly continues offering the service/);assert.match(html,/subscription/);assert.match(html,/recurring charges/);
+  assert(!/Enjoy Budgetly for life|forever|guaranteed refund|tax.inclusive|no fees/i.test(html));
+ }
+});
+
+test('checkout legal links resolve to current verified documents without hardcoded draft identities',async()=>{
+ const raw=Object.fromEntries(['terms','privacy'].map((type,i)=>{const content=`# Synthetic active ${type}\n\nUpdated official-record fixture. Not a published policy.`;return[type,{id:501+i,document_type:type,version:'qa-current-2',content,content_sha256:createHash('sha256').update(content,'utf8').digest('hex'),published_at:'2026-11-10T00:00:00Z',effective_at:'2026-11-10T00:00:00Z'}];}));
+ const policies=await PolicyRecords.verifyActivePolicyPair(raw);
+ const renderActive=(component,props)=>renderToStaticMarkup(createElement(PolicyRecords.PolicyContext.Provider,{value:policies},createElement(component,props)));
+ const offer=renderActive(PaymentPages.PaymentRequiredPage,{profile:user,navigate:noop,access:{state:'ready',data:{has_lifetime_access:false,purchase_required:true,entitlement_status:null}}});
+ assert(offer.includes('href="/terms-of-service"'));assert(offer.includes('href="/privacy-policy"'));assert(!offer.includes('?draft='));
+ const registration=renderActive(AuthPage.default,{path:'/register',navigate:noop});
+ for(const type of ['terms','privacy'])assert(registration.includes(PolicyRecords.policyLink(type,policies.documents[type]).replaceAll('&','&amp;')));
+ const previous=Object.getOwnPropertyDescriptor(globalThis,'window');
+ try{
+  Object.defineProperty(globalThis,'window',{configurable:true,value:{location:{search:''}}});
+  for(const[type,path]of[['terms','/terms-of-service'],['privacy','/privacy-policy']]){
+   const html=renderActive(LegalPage.default,{path,navigate:noop});
+   assert(html.includes('Active official record'));assert(html.includes('qa-current-2'));assert(html.includes(raw[type].content));assert(!html.includes('Awaiting first publication.'));
+  }
+ }finally{if(previous)Object.defineProperty(globalThis,'window',previous);else delete globalThis.window;}
 });

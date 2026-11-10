@@ -3,7 +3,7 @@ import { LoadingButton } from "../components/Loading";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Moon, Sun } from "lucide-react";
 import BrandMark from "../components/BrandMark";
 import { GlassMonogram } from "../components/landing/LandingArtwork";
-import { api, jsonBody } from "../lib/api";
+import { api, captureSession, commitSession, isCurrentSession, jsonBody } from "../lib/api";
 import { focusFormError, nativeValidationMessage, normalizeError } from "../lib/errors";
 import { ErrorNotice, FieldError } from "../components/FormFeedback";
 import GoogleIdentityButton from "../components/GoogleIdentityButton";
@@ -21,7 +21,7 @@ const views = {
   "/forgot-password": { title: "Reset your password", intro: "We’ll send instructions to the email on your account.", submit: "Send instructions" },
 };
 
-export default function AuthPage({ path, navigate, onAuthenticated, onSessionCleared, theme, onThemeChange }) {
+export default function AuthPage({ path, navigate, onAuthenticated, onSessionStarted, onSessionCleared, theme, onThemeChange }) {
   const cleanPath = path.split("?")[0];
   const query = new URLSearchParams(path.split("?")[1] || "");
   const resetMatch = cleanPath.match(/^\/reset-password\/([^/]+)\/([^/]+)\/?$/);
@@ -79,34 +79,33 @@ export default function AuthPage({ path, navigate, onAuthenticated, onSessionCle
     }
     if (isReset && form.password !== form.confirm_password) { setFieldErrors({ confirm_password: "Your passwords don't match." });setError("Please check the highlighted details.");focusFormError(submittedForm);return; }
     authLock.current = true;setBusy(true);
+    const scope = captureSession(), controller = new AbortController();googleRequest.current = controller;
+    const signal = AbortSignal.any([scope.signal, controller.signal, AbortSignal.timeout(20000)]);
     try {
       if (isRegister) {
         const registration = { username: form.username, email: form.email, first_name: form.first_name, last_name: form.last_name, password: form.password, password_confirm: form.password_confirm, age_eligibility: form.age_eligibility, accept_terms: acceptedTerms, accept_privacy_policy: acknowledgedPrivacy };
         const body = { ...registration, ...legalAcceptanceBody(policies.documents) };
-        await api("/api/auth/register/", { method: "POST", auth: false, body: jsonBody(body) });
+        await api("/api/auth/register/", { method: "POST", auth: false, body: jsonBody(body), signal });
+        if (!mounted.current || !isCurrentSession(scope)) return;
         navigate("/login?created=1");
       } else if (isForgot) {
-        await api("/api/auth/forgot-password/", { method: "POST", auth: false, body: jsonBody({ email: form.email }) });
+        await api("/api/auth/forgot-password/", { method: "POST", auth: false, body: jsonBody({ email: form.email }), signal });
+        if (!mounted.current || !isCurrentSession(scope)) return;
         setNotice("If an account uses this email, reset instructions have been sent.");
       } else if (isReset) {
         const [, uid, token] = resetMatch;
-        await api(`/api/auth/reset-password/${uid}/${token}/`, { method: "POST", auth: false, body: jsonBody({ new_password: form.password, confirm_password: form.confirm_password }) });
+        await api(`/api/auth/reset-password/${uid}/${token}/`, { method: "POST", auth: false, body: jsonBody({ new_password: form.password, confirm_password: form.confirm_password }), signal });
+        if (!mounted.current || !isCurrentSession(scope)) return;
         onSessionCleared?.();
         navigate("/login?reset=1");
       } else {
-        const tokens = await api("/api/auth/login/", { method: "POST", auth: false, body: jsonBody({ username: form.username, password: form.password }) });
-        sessionStorage.setItem("budgetly.access", tokens.access);
-        sessionStorage.setItem("budgetly.refresh", tokens.refresh);
+        const tokens = await api("/api/auth/login/", { method: "POST", auth: false, body: jsonBody({ username: form.username, password: form.password }), signal });
+        if (!mounted.current || !isCurrentSession(scope)) return;
         errorContext = "session";
-        try {
-          const profile = await api("/api/auth/profile/");
-          onAuthenticated(profile);
-        } catch (profileError) {
-          sessionStorage.removeItem("budgetly.access"); sessionStorage.removeItem("budgetly.refresh");
-          throw profileError;
-        }
+        onSessionStarted(commitSession(tokens, scope));
       }
     } catch (requestError) {
+      if (!mounted.current || !isCurrentSession(scope) || controller.signal.aborted) return;
       if (isRegister && staleLegalDocuments(requestError)) {
         setForm(current => ({ ...current, accept_terms: false, accept_privacy_policy: false, termsDocumentKey: "", privacyDocumentKey: "" }));
         setError("The legal documents changed or are temporarily unavailable. Review the updated versions and confirm again before creating your account.");
@@ -117,7 +116,7 @@ export default function AuthPage({ path, navigate, onAuthenticated, onSessionCle
       const result = normalizeError(requestError, { context: errorContext, fields: isRegister ? { first_name: "First name", last_name: "Last name", username: "Username", email: "Email address", password: "Password", password_confirm: "Confirm password", age_eligibility: "Age confirmation", accept_terms: "Terms agreement", accept_privacy_policy: "Privacy acknowledgement" } : isForgot ? { email: "Email address" } : isReset ? { password: "New password", confirm_password: "Confirm new password" } : { username: "Username", password: "Password" }, aliases: isReset ? { new_password: "password" } : {} });
       setFieldErrors(result.fieldErrors);setFormErrors(result.formErrors);setError(result.message);
       focusFormError(submittedForm);
-    } finally { authLock.current = false;setBusy(false); }
+    } finally { authLock.current = false;if (mounted.current) setBusy(false); }
   }
 
   async function submitGoogle(credential) {
@@ -127,17 +126,17 @@ export default function AuthPage({ path, navigate, onAuthenticated, onSessionCle
     if (isRegister && (policyBlocked || !form.age_eligibility || !acceptedTerms || !acknowledgedPrivacy)) {
       setError("Review the current documents and complete all three confirmations before creating an account with Google.");focusFormError(formElement);return;
     }
-    const controller = new AbortController();googleRequest.current = controller;
+    const scope = captureSession(), controller = new AbortController();googleRequest.current = controller;
+    const signal = AbortSignal.any([scope.signal, controller.signal, AbortSignal.timeout(20000)]);
     authLock.current = true;setBusy(true);setGoogleBusy(true);
     try {
       const registration = isRegister ? { identities: legalAcceptanceBody(policies.documents), declarations: { age_eligibility: form.age_eligibility, accept_terms: acceptedTerms, accept_privacy_policy: acknowledgedPrivacy } } : undefined;
-      const tokens = await authenticateGoogle(credential, { registration, signal: controller.signal });
-      const user = await readGoogleSessionProfile(tokens.access, { signal: controller.signal });
-      if (!mounted.current || controller.signal.aborted) return;
-      sessionStorage.setItem("budgetly.access", tokens.access);sessionStorage.setItem("budgetly.refresh", tokens.refresh);
-      onAuthenticated(user);
+      const tokens = await authenticateGoogle(credential, { registration, signal });
+      const user = await readGoogleSessionProfile(tokens.access, { signal });
+      if (!mounted.current || !isCurrentSession(scope) || controller.signal.aborted) return;
+      onAuthenticated(user, commitSession(tokens, scope));
     } catch (requestError) {
-      if (!mounted.current || controller.signal.aborted) return;
+      if (!mounted.current || !isCurrentSession(scope) || controller.signal.aborted) return;
       if (isRegister && staleLegalDocuments(requestError)) {
         setForm(current => ({ ...current, accept_terms: false, accept_privacy_policy: false, termsDocumentKey: "", privacyDocumentKey: "" }));
         setError("The legal documents changed or are temporarily unavailable. Review the updated versions and confirm again before creating your account.");await policies.refresh();

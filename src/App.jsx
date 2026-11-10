@@ -8,7 +8,8 @@ import FinancePage from "./pages/FinancePage";
 import LegalDraftPage from "./pages/LegalDraftPage";
 import AccountLegalProvider from "./components/legal/AccountLegalProvider";
 import LegalUpdateNotice from "./components/legal/LegalUpdateNotice";
-import { api } from "./lib/api";
+import { captureSession, clearSession, isCurrentSession, readSessionProfile, revokeSessionTokens, suspendSession } from "./lib/api";
+import { friendlyErrorMessage } from "./lib/errors";
 import { disableGoogleAutoSelect } from "./lib/googleIdentity";
 import { getAccessStatus } from "./lib/billingApi";
 import { clearPendingPurchaseReference, hasLifetimeAccess, paymentReturnReference, pendingPurchaseReference, rememberPurchaseReference, validateAccessStatus } from "./lib/billingState.js";
@@ -32,7 +33,8 @@ const paymentEnforcementEnabled = import.meta.env.VITE_ENFORCE_LIFETIME_ACCESS =
 export default function App() {
   const [path, setPath] = useState(currentPath);
   const [profile, setProfile] = useState(null);
-  const [sessionState, setSessionState] = useState(() => sessionStorage.getItem("budgetly.access") ? "checking" : "signed-out");
+  const [sessionState, setSessionState] = useState(() => sessionStorage.getItem("budgetly.access") || sessionStorage.getItem("budgetly.refresh") ? "checking" : "signed-out");
+  const [sessionError, setSessionError] = useState(""), [validationAttempt, setValidationAttempt] = useState(0);
   const [access, setAccess] = useState({ state: "idle", data: null });
   const accessRequest = useRef(0), billingOwner = useRef(null), deniedOwner = useRef(null);
   const [serverPaymentRequired, setServerPaymentRequired] = useState(false);
@@ -40,6 +42,12 @@ export default function App() {
   const [signingOut, setSigningOut] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("budgetly.sidebarCollapsed") === "true");
   const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || localStorage.getItem("budgetly.theme") || "light");
+
+  const clearPrivateState = useCallback((securityBoundary = false) => {
+    accessRequest.current += 1;billingOwner.current = null;
+    setProfile(null);setAccess({ state: "idle", data: null });setSidebarOpen(false);setSigningOut(false);
+    if (securityBoundary) { deniedOwner.current = null;setServerPaymentRequired(false); }
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -56,13 +64,12 @@ export default function App() {
         const reference = paymentReturnReference(currentPath());
         if (reference) rememberPurchaseReference(reference, billingOwner.current ?? undefined);
       }
-      accessRequest.current += 1;billingOwner.current = null;deniedOwner.current = null;setServerPaymentRequired(false);
-      setProfile(null); setAccess({ state: "idle", data: null });setSessionState("signed-out");
+      clearPrivateState(true);setSessionError("");setSessionState("signed-out");
       window.history.replaceState({}, "", "/login?session=expired"); setPath(currentPath());
     };
     window.addEventListener("budgetly:unauthorized", expired);
     return () => { window.removeEventListener("popstate", sync); window.removeEventListener("budgetly:unauthorized", expired); };
-  }, []);
+  }, [clearPrivateState]);
 
   const refreshAccess = useCallback(async () => {
     const request = ++accessRequest.current, owner = billingOwner.current;
@@ -80,32 +87,49 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!sessionStorage.getItem("budgetly.access")) return;
+    if (!sessionStorage.getItem("budgetly.access") && !sessionStorage.getItem("budgetly.refresh")) return;
     let cancelled = false;
-    api("/api/auth/profile/").then((user) => {
-      if (!cancelled) { billingOwner.current = user.id;setProfile(user); setSessionState("signed-in"); refreshAccess(); }
-    }).catch(() => {
-      sessionStorage.removeItem("budgetly.access");
-      sessionStorage.removeItem("budgetly.refresh");
-      if (!cancelled) { setProfile(null); setSessionState("signed-out"); }
+    const scope = captureSession(), controller = new AbortController();
+    Promise.resolve().then(async () => {
+      if (cancelled) return;
+      try {
+        const user = await readSessionProfile({ signal: controller.signal });
+        if (!cancelled && isCurrentSession(scope)) { billingOwner.current = user.id;setProfile(user);setSessionError("");setSessionState("signed-in");refreshAccess(); }
+      } catch (error) {
+        if (cancelled || !isCurrentSession(scope)) return;
+        suspendSession(scope);setSessionError(friendlyErrorMessage(error, { context: "session" }));
+      }
     });
-    return () => { cancelled = true; };
-  }, [refreshAccess]);
+    return () => { cancelled = true;controller.abort(); };
+  }, [refreshAccess, validationAttempt, clearPrivateState]);
+
+  useEffect(() => {
+    const checking = () => {
+      // Startup already validates its own profile. Suspend an existing private
+      // workspace once when a background request needs shared token refresh.
+      if (billingOwner.current == null) return;
+      clearPrivateState();setSessionError("");setSessionState("checking");setValidationAttempt(value => value + 1);
+    };
+    const unavailable = () => {
+      if (!sessionStorage.getItem("budgetly.access") && !sessionStorage.getItem("budgetly.refresh")) return;
+      clearPrivateState();setSessionError("We couldn’t confirm your sign-in right now. Please try again.");setSessionState("unavailable");
+    };
+    window.addEventListener("budgetly:session-checking", checking);
+    window.addEventListener("budgetly:session-unavailable", unavailable);
+    return () => { window.removeEventListener("budgetly:session-checking", checking);window.removeEventListener("budgetly:session-unavailable", unavailable); };
+  }, [clearPrivateState]);
 
   const navigate = useCallback(async (destination, { replace = false } = {}) => {
     if (destination === "/logout") {
       disableGoogleAutoSelect();
-      setSigningOut(true);
-      const refresh = sessionStorage.getItem("budgetly.refresh");
-      try { if (refresh) await api("/api/auth/logout/", { method: "POST", body: JSON.stringify({ refresh }) }); } catch { /* Clear this browser session even if the service is unavailable. */ }
-      sessionStorage.removeItem("budgetly.access"); sessionStorage.removeItem("budgetly.refresh");
-      accessRequest.current += 1;billingOwner.current = null;deniedOwner.current = null;setServerPaymentRequired(false);clearPendingPurchaseReference();
-      setProfile(null); setAccess({ state: "idle", data: null }); setSessionState("signed-out"); setSigningOut(false); destination = "/login";
+      const tokens = clearSession();
+      clearPrivateState(true);clearPendingPurchaseReference();setSessionError("");setSessionState("signed-out");destination = "/login";
+      void revokeSessionTokens(tokens);
     }
     window.history[replace ? "replaceState" : "pushState"]({}, "", destination);
     setPath(currentPath()); setSidebarOpen(false);
     window.scrollTo({ top: 0, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
-  }, []);
+  }, [clearPrivateState]);
 
   const pathname = path.split("?")[0].replace(/\/$/, "") || "/";
   const query = new URLSearchParams(path.split("?")[1] || "");
@@ -123,12 +147,18 @@ export default function App() {
   const authPaymentDestination = resumeReference ? `/payment/complete?reference=${encodeURIComponent(resumeReference)}` : query.get("returnTo") === "payment-required" ? "/payment-required" : null;
   const authDestination = authPaymentDestination || (query.get("linkGoogle") === "1" ? "/settings?connectGoogle=1" : null);
 
-  const completeAuthentication = useCallback((user) => {
+  const completeAuthentication = useCallback((user, scope) => {
+    if (!isCurrentSession(scope)) return;
     deniedOwner.current = null;setServerPaymentRequired(false);
     billingOwner.current = user.id;
     setProfile(user); setSessionState("signed-in");
     refreshAccess();
   }, [refreshAccess]);
+
+  const validateAuthentication = useCallback((scope) => {
+    if (!isCurrentSession(scope)) return;
+    clearPrivateState(true);setSessionError("");setSessionState("checking");setValidationAttempt(value => value + 1);
+  }, [clearPrivateState]);
 
   const paymentAccessChecked = useCallback((data, owner) => {
     if (owner !== billingOwner.current) return;
@@ -167,11 +197,11 @@ export default function App() {
     return () => { current = false; };
   }, [sessionState, isAuthPath, isRecoveryPath, isPublicDocument, isLandingPath, isPaymentCompletePath, isPaymentRequiredPath, billingBypass, access.state, confirmedAccess, authDestination, enforceAccess, navigate]);
 
-  if (sessionState === "checking") return <StartupLoading />;
+  if (["checking", "unavailable"].includes(sessionState)) return <StartupLoading error={sessionError} onRetry={() => { setSessionError("");setSessionState("checking");setValidationAttempt(value => value + 1); }} onSignOut={() => navigate("/logout")} />;
   if (isLandingPath) return <LandingPage navigate={navigate} theme={theme} onThemeChange={setTheme} />;
   if (sessionState === "signed-out" && isPublicDocument) return <LegalDraftPage path={path} navigate={navigate} theme={theme} onThemeChange={setTheme} />;
   if (isPaymentCompletePath) return <PaymentCompletePage key={`${profile?.id || "signed-out"}:${query.get("reference") || "missing"}`} path={path} profile={profile} isAuthenticated={sessionState === "signed-in"} onAccessChecked={paymentAccessChecked} navigate={navigate} theme={theme} onThemeChange={setTheme} />;
-  if (sessionState === "signed-out" || isRecoveryPath) return <AuthPage key={pathname} path={isAuthPath ? path : "/login"} theme={theme} onThemeChange={setTheme} navigate={navigate} onAuthenticated={completeAuthentication} onSessionCleared={() => { sessionStorage.removeItem("budgetly.access"); sessionStorage.removeItem("budgetly.refresh"); accessRequest.current += 1;billingOwner.current = null;deniedOwner.current = null;setServerPaymentRequired(false);setProfile(null); setAccess({ state: "idle", data: null }); setSessionState("signed-out"); }} />;
+  if (sessionState === "signed-out" || isRecoveryPath) return <AuthPage key={pathname} path={isAuthPath ? path : "/login"} theme={theme} onThemeChange={setTheme} navigate={navigate} onAuthenticated={completeAuthentication} onSessionStarted={validateAuthentication} onSessionCleared={() => { clearSession();clearPrivateState(true);setSessionError("");setSessionState("signed-out"); }} />;
   if (isAuthPath) return <StartupLoading />;
   if (isPaymentRequiredPath || (enforceAccess && !billingBypass && !confirmedAccess && access.state === "unavailable")) return <PaymentRequiredPage profile={profile} access={access} onRefreshAccess={refreshAccess} navigate={navigate} theme={theme} onThemeChange={setTheme} />;
   if (enforceAccess && !billingBypass && !confirmedAccess) return access.state === "ready" ? <PaymentRequiredPage profile={profile} access={access} onRefreshAccess={refreshAccess} navigate={navigate} theme={theme} onThemeChange={setTheme} /> : <PaymentAccessLoading navigate={navigate} theme={theme} onThemeChange={setTheme} />;

@@ -32,7 +32,7 @@ const FALLBACKS = {
   savings: "We couldn't update this savings plan or goal. Please try again.",
   login: "We couldn't sign you in. Please try again.",
   register: "We couldn't create your account. Please review your details and try again.",
-  session: "We couldn't open your account. Please sign in again.",
+  session: "We couldn't confirm your sign-in right now. Please try again.",
   forgot: "We couldn't request reset instructions. Please try again shortly.",
   reset: "We couldn't reset your password. Please try again.",
   profile: "We couldn't save your profile. Please try again.",
@@ -156,6 +156,7 @@ export function normalizeError(error, { context = "default", fields, aliases = {
     if (status === 404) return result("google", "Google sign-in isn't available on Budgetly right now. Try again later or use your password.");
     if (context !== "googleLink" && status === 401) return result("google", "Google sign-in couldn't be verified. Try again or use your password.");
   }
+  if (status === 401 && error?.sessionUnresolved) return result("session-unresolved", "We couldn’t confirm your sign-in right now. Your saved sign-in has been kept. Please try again.", { retryable: true });
   if (status === 401) return result("authentication", context === "login" ? "The username or password you entered is incorrect." : "Your session has expired. Please sign in again.");
   if (status === 403 && data?.code === "payment_required") return result("payment-required", "Lifetime access is required for financial features. Check your access or unlock Budgetly to continue.", { action: "payment" });
   if (status === 403 && context === "login") return result("authentication", "We couldn't sign you in with those details. Check your username and password, or use password reset.");

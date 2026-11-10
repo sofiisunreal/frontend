@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test:billing": "node --test tests/billing.test.mjs tests/billing-api.test.mjs",
     "test:errors": "node --test tests/errors.test.mjs tests/api-errors.test.mjs",
-    "test:google": "node --test tests/google-auth.test.mjs tests/google-api.test.mjs"
+    "test:google": "node --test tests/google-auth.test.mjs tests/google-api.test.mjs",
+    "test:session": "node --test tests/session.test.mjs"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

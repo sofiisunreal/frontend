@@ -15,6 +15,13 @@ test('protected 401 is session expiry; ordinary validation and permission errors
  assert.equal(normalizeError(apiError(400,{email:['Enter a valid email address.']})).kind,'validation');
  assert.equal(normalizeError(apiError(403,{detail:'Internal permission class failed'})).kind,'permission');
 });
+
+test('unresolved session failures offer retry instead of claiming credentials have expired',()=>{
+ for(const error of [apiError(503,{detail:'Internal service unavailable'}),apiError(502),apiError(429),{status:0,transport:'timeout'},{...apiError(401),sessionUnresolved:true}]){
+  const result=normalizeError(error,{context:'session'});
+  assert.equal(result.retryable,true);assert.match(result.message,/try again/i);assert(!/expired|sign in again/i.test(result.message));
+ }
+});
 test('registration validation stays next to its fields with all password constraints',()=>{
  const r=normalizeError(apiError(400,{email:['Enter a valid email address.'],password:['This password is too common.','This password is too short. It must contain at least 12 characters.']}),{context:'register'});
  assert.equal(r.fieldErrors.email,'Enter a valid email address.');assert.match(r.fieldErrors.password,/too common/);assert.match(r.fieldErrors.password,/12 characters/);assert.equal(r.message,'Please check the highlighted details.');

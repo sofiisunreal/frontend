@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import BrandMark from "./BrandMark";
 
 // The three ledger strokes fade gently; no rotation, travel or implied percentage.
@@ -15,12 +16,15 @@ export function LoadingButton({ busy, loadingLabel = "Saving…", children, clas
   </button>{announce && <span className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">{busy ? loadingLabel : ""}</span>}</>;
 }
 
-export function StartupLoading() {
+export function StartupLoading({ error, onRetry, onSignOut }) {
+  const notice = useRef(null);
+  useEffect(() => { if (error) notice.current?.focus(); }, [error]);
   return <main className="orbit-loading-screen session-loading" aria-labelledby="startup-title">
     <div className="orbit-startup-card">
       <div className="orbit-startup-brand"><BrandMark size={43} /><span>budgetly<span className="orbit-brand-dot">.</span></span></div>
-      <div className="orbit-startup-caption"><h1 id="startup-title">Opening your workspace</h1><p>Your money. A little more clarity.</p></div>
-      <InlineLoading className="orbit-startup-status">Connecting to Budgetly…</InlineLoading>
+      <div className="orbit-startup-caption"><h1 id="startup-title">{error ? "Your session needs another check" : "Opening your workspace"}</h1><p>{error ? "Your saved sign-in is still on this device. Your financial information stays hidden while we check." : "Your money. A little more clarity."}</p></div>
+      {error ? <p ref={notice} className="orbit-session-error" role="alert" tabIndex={-1}>{error}</p> : <InlineLoading className="orbit-startup-status">Connecting to Budgetly…</InlineLoading>}
+      {(onSignOut || (error && onRetry)) && <div className="orbit-session-actions">{error && onRetry && <button type="button" className="primary-button" onClick={onRetry}>Try again</button>}{onSignOut && <button type="button" className="text-button" onClick={onSignOut}>Sign out</button>}</div>}
     </div>
   </main>;
 }

@@ -10,6 +10,7 @@ import AccountLegalProvider from "./components/legal/AccountLegalProvider";
 import LegalUpdateNotice from "./components/legal/LegalUpdateNotice";
 import { captureSession, clearSession, isCurrentSession, readSessionProfile, revokeSessionTokens, suspendSession } from "./lib/api";
 import { friendlyErrorMessage } from "./lib/errors";
+import { profileDisplayName } from "./lib/profile";
 import { disableGoogleAutoSelect } from "./lib/googleIdentity";
 import { getAccessStatus } from "./lib/billingApi";
 import { clearPendingPurchaseReference, hasLifetimeAccess, paymentReturnReference, pendingPurchaseReference, rememberPurchaseReference, validateAccessStatus } from "./lib/billingState.js";
@@ -207,7 +208,8 @@ export default function App() {
   if (enforceAccess && !billingBypass && !confirmedAccess) return access.state === "ready" ? <PaymentRequiredPage profile={profile} access={access} onRefreshAccess={refreshAccess} navigate={navigate} theme={theme} onThemeChange={setTheme} /> : <PaymentAccessLoading navigate={navigate} theme={theme} onThemeChange={setTheme} />;
 
   const screen = routeScreens[sessionState === "signed-in" && isAuthPath && !isRecoveryPath ? "/" : pathname] || "";
-  const title = `${profile?.first_name || profile?.username || "My account"}`;
+  const title = profileDisplayName(profile);
+  const needsProfileName = !profileDisplayName(profile, "");
   const reopenOnboarding = () => {
     if (profile?.id) {
       localStorage.removeItem(`budgetly.onboarding.hidden.${profile.id}`);
@@ -223,7 +225,10 @@ export default function App() {
     <main id="main-content" className="main-area" tabIndex={-1} inert={sidebarOpen ? true : undefined}>
       <header className="topbar">
         <div className="topbar-left"><button className="icon-button mobile-menu" aria-label="Open navigation" aria-expanded={sidebarOpen} aria-controls="budgetly-sidebar" onClick={() => setSidebarOpen(true)}><Menu size={20} /></button><span className="workspace-label"><span className="workspace-desktop">Personal workspace</span><span className="workspace-mobile">Budgetly · {screen || "Not found"}</span></span></div>
-        <div className="topbar-actions"><button className="icon-button theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button><button className="topbar-profile" aria-label={`${title}, open settings`} onClick={() => navigate("/settings")}><span className="topbar-avatar">{(profile?.first_name || profile?.username || "B").slice(0, 1).toUpperCase()}</span><span className="topbar-user"><strong>{title}</strong><small>Personal account</small></span><ArrowRight size={15} /></button></div>
+        <div className="topbar-actions">
+          <button className="icon-button theme-toggle" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
+          <button className="topbar-profile" aria-label={`${title}, open settings`} title={title} onClick={() => navigate("/settings")}><span className="topbar-avatar">{Array.from(title)[0].toUpperCase()}</span><span className="topbar-user"><strong>{title}</strong><small>{needsProfileName ? "Complete profile" : "Personal account"}</small></span><ArrowRight size={15} /></button>
+        </div>
       </header>
       <LegalUpdateNotice navigate={navigate} screen={screen} />
       {screen ? <FinancePage key={screen} logoutBusy={signingOut} screen={screen} initialAction={query.get("new")} profile={profile} theme={theme} onThemeChange={setTheme} onProfileChange={setProfile} onReopenOnboarding={reopenOnboarding} navigate={navigate} /> : <section className="page-content not-found"><h1>That page isn’t here.</h1><p className="muted-text">The address may have changed, or the page may not exist.</p><button className="primary-button" onClick={() => navigate("/")}>Back to overview <ArrowRight size={15} /></button></section>}

@@ -1,4 +1,21 @@
 /* Orbit support hub and financial records. All materials inherit shared Orbit tokens. */
+.topbar-user { max-width:200px; }
+.profile-completion-note { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 20px;margin:0 0 22px;padding:12px 0;border-block:1px solid var(--line); }
+.profile-completion-note p { margin:0;color:var(--ink-soft);font-size:13px;line-height:1.6; }
+.profile-completion-note button { min-height:44px; }
+.dashboard-intro .muted-text,.getting-started-head h2 { overflow-wrap:anywhere; }
+.customer-support { min-width:0;margin:24px 0 0;padding:20px 0 0;border-top:1px solid var(--line);color:var(--ink-soft);text-align:left; }
+.customer-support h2 { margin:0;color:var(--ink);font-size:15px;line-height:1.4;font-weight:600;letter-spacing:-.2px; }
+.customer-support p { margin:10px 0 0;font-size:13px;line-height:1.75; }
+.customer-support a,.deletion-guidance a { display:inline-flex;align-items:center;min-height:44px;max-width:100%;overflow-wrap:anywhere;color:var(--color-focus);text-decoration:underline;text-underline-offset:3px; }
+.customer-support .customer-support-privacy { font-size:12px; }
+.orbit-auth .customer-support { padding:20px 8px 0; }
+.deletion-guidance { margin:20px 0 24px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--surface-content);color:var(--ink-soft);font-size:13px;line-height:1.75; }
+.deletion-guidance h3 { margin:0;color:var(--ink);font-size:14px;line-height:1.5; }
+.deletion-guidance ol { margin:12px 0;padding-left:22px;list-style:decimal; }
+.deletion-guidance li + li { margin-top:8px; }
+.deletion-guidance p { margin:12px 0 0;overflow-wrap:anywhere; }
+.deletion-guidance .inline-link { min-height:44px;color:var(--color-focus); }
 .orbit-dashboard .dashboard-setup-top { margin:0 0 22px;border:0;padding:0; }
 .dashboard-setup-top .getting-started { margin:0;border:1px solid var(--glass-border);border-radius:26px;padding:24px;background-color:var(--glass-surface);background-image:var(--balance-background);box-shadow:var(--glass-shadow); }
 .dashboard-setup-top .getting-started-head { align-items:flex-start; }

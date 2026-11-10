@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LoadingButton } from "../components/Loading";
+import PaymentSupport from "../components/PaymentSupport";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Moon, Sun } from "lucide-react";
 import BrandMark from "../components/BrandMark";
 import { GlassMonogram } from "../components/landing/LandingArtwork";
@@ -208,6 +209,7 @@ export default function AuthPage({ path, navigate, onAuthenticated, onSessionSta
           <p className="auth-switch">{isRegister ? "Already have an account?" : isForgot || isReset ? "Remembered your password?" : "New to Budgetly?"} <button type="button" onClick={() => navigate(isRegister || isForgot || isReset ? "/login" : "/register")}>{isRegister || isForgot || isReset ? "Sign in" : "Create an account"}</button></p>
           {!isRegister && !isForgot && !isReset && <p className="auth-price-note">Lifetime access · {LIFETIME_PRICE_LABEL} once. No subscriptions.</p>}
         </form>
+        {!isRegister && <PaymentSupport />}
         <footer className="auth-footer"><span>Personal finance, at your pace.</span><nav aria-label="Legal documents"><button type="button" onClick={() => navigate(policyLink("privacy", policies.documents?.privacy))}>Privacy policy{official ? ` · v${policies.documents.privacy.version}` : " · Draft"}</button><button type="button" onClick={() => navigate(policyLink("terms", policies.documents?.terms))}>Terms{official ? ` · v${policies.documents.terms.version}` : " · Draft"}</button></nav></footer>
       </section>
     </main>

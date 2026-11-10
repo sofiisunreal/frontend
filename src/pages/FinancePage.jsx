@@ -3,6 +3,8 @@ import { ArrowDownLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, BadgeDollarSig
 import { api, apiBaseUrl, asList, formErrorMessage, jsonBody } from "../lib/api";
 import { focusFormError, nativeValidationMessage, normalizeError } from "../lib/errors";
 import { ErrorNotice, FieldError } from "../components/FormFeedback";
+import { profileDisplayName } from "../lib/profile";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "../lib/support";
 import GoogleAccountLink from "../components/GoogleAccountLink";
 import HelpPage from "./HelpPage";
 import { DashboardLoading, InlineLoading, LoadingButton, ResourceLoading, SpendingLoading } from "../components/Loading";
@@ -87,15 +89,17 @@ function Dashboard({ navigate, profile, theme, onThemeChange }) {
   const balanceEntries = Object.entries(data?.balances || {});
   const currencyEntries = [...new Set([...Object.keys(data?.income || {}), ...Object.keys(data?.expenses || {}), ...Object.keys(data?.cash_flow || {})])];
   const empty = data && !balanceEntries.length && !currencyEntries.length && !data.recent_transactions?.length;
+  const name = profileDisplayName(profile, "");
   return <div className={`page-content dashboard-page orbit-dashboard ${empty ? "dashboard-page-empty" : ""}`}>
     <div className="page-intro dashboard-intro">
-      <div><h1>Overview<span className="orbit-heading-dot" aria-hidden="true">.</span></h1><p className="muted-text">A little clarity. A lot more possibility.</p></div>
+      <div><h1>Overview<span className="orbit-heading-dot" aria-hidden="true">.</span></h1><p className="muted-text">{name ? `Welcome back, ${name}.` : `${profileDisplayName(profile)}, at a glance.`}</p></div>
       <div className="overview-actions">
         <button className="orbit-theme-toggle" onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`} title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
         <label className="month-picker"><CalendarDays size={17} aria-hidden="true" /><span className="visually-hidden">Month</span><input type="month" aria-label="Month" value={monthValue} onChange={(event) => { setBusy(true); setError(""); setMonthValue(event.target.value || today().slice(0, 7)); }} /></label>
         <button className="primary-button" onClick={() => navigate("/transactions?new=1")}><Plus size={17} />Add transaction</button>
       </div>
     </div>
+    {!name && <div className="profile-completion-note"><p>Add your name to make Budgetly feel more like you.</p><button type="button" className="text-button" onClick={() => navigate("/settings")}>Complete profile <ArrowRight size={15} /></button></div>}
     {!onboardingHidden && (!onboardingCompletedBefore || onboardingRequested) && onboardingData && (!onboardingComplete || onboardingRequested) && <div className="dashboard-setup dashboard-setup-top">
       <GettingStartedChecklist progress={onboardingData} complete={onboardingComplete} onDismiss={() => { localStorage.setItem(`budgetly.onboarding.hidden.${profile.id}`, "true"); localStorage.removeItem(`budgetly.onboarding.reopen.${profile.id}`); setOnboardingHidden(true); }} navigate={navigate} profile={profile} />
     </div>}
@@ -252,8 +256,9 @@ function GettingStartedChecklist({ progress, complete, onDismiss, navigate, prof
     { key: "budgets", title: "Set your first budget", copy: "Give an everyday spending category a limit that works for you.", url: "/budgets?new=1", count: progress.budgets },
   ];
   const finished = steps.filter((step) => step.count > 0).length;
+  const name = profileDisplayName(profile, "");
   return <section className={`getting-started ${complete ? "getting-started-complete" : ""}`} aria-labelledby="getting-started-title">
-    <div className="getting-started-head"><div><span className="guide-progress">Getting started · {complete ? "Guide complete" : `${finished} of 3 steps saved`}</span><h2 id="getting-started-title">{complete ? `You’re all set${profile?.first_name ? `, ${profile.first_name}` : ""}.` : `Welcome${profile?.first_name ? `, ${profile.first_name}` : ""}.`}</h2><p>{complete ? "Your first account, transaction and budget are saved. Your overview will reflect your Budgetly records." : "A few simple steps will make your overview useful. Your progress updates from saved Budgetly data."}</p></div><button type="button" className="icon-button" aria-label="Dismiss getting started guide" onClick={onDismiss}><X size={18} /></button></div>
+    <div className="getting-started-head"><div><span className="guide-progress">Getting started · {complete ? "Guide complete" : `${finished} of 3 steps saved`}</span><h2 id="getting-started-title">{name ? `${complete ? "You’re all set" : "Welcome"}, ${name}.` : complete ? `${profileDisplayName(profile)} is ready.` : `Welcome. Let’s set up ${profileDisplayName(profile).toLowerCase()}.`}</h2><p>{complete ? "Your first account, transaction and budget are saved. Your overview will reflect your Budgetly records." : "A few simple steps will make your overview useful. Your progress updates from saved Budgetly data."}</p></div><button type="button" className="icon-button" aria-label="Dismiss getting started guide" onClick={onDismiss}><X size={18} /></button></div>
     {!complete && <ol className="getting-started-steps">{steps.map((step, index) => <li key={step.key} className={step.count ? "step-complete" : ""}><span className="step-index">{step.count ? <Check size={16} /> : index + 1}</span><div><h3>{step.title}</h3><p>{step.copy}</p></div>{step.count ? <span className="step-status">Saved</span> : <button className="text-button" onClick={() => navigate(step.url)}>Start <ArrowRight size={15} /></button>}</li>)}</ol>}
     {complete && <button className="secondary-button" onClick={onDismiss}>Continue to overview <ArrowRight size={15} /></button>}
   </section>;
@@ -719,6 +724,7 @@ function SettingsPage({ logoutBusy, profile, theme, onThemeChange, onReopenOnboa
     {notice && <p className="inline-notice" role="status"><Check size={16} />{notice}</p>}
     <div className="settings-grid">
       <section className="settings-section"><div className="section-heading"><div><h2>Personal details</h2><p>Your profile information</p></div></div>
+        {!profileDisplayName(profile, "") && <p className="muted-text">Add your name so Budgetly can greet you. Your sign-in username stays the same.</p>}
         <form className="settings-form" onSubmit={saveProfile} onInvalid={event => invalid(event, "profile")}>
           {feedback("profile")}
           <SettingsField label="Username" name="username" value={form.username} disabled />
@@ -741,6 +747,15 @@ function SettingsPage({ logoutBusy, profile, theme, onThemeChange, onReopenOnboa
       <section className="settings-section"><div className="section-heading"><div><h2>Your data</h2><p>Save a copy of your Budgetly records as JSON.</p></div></div><div className="settings-form"><p className="muted-text">The export downloads to this device and may contain sensitive financial information. Store it somewhere private.</p>{feedback("export")}<LoadingButton type="button" className="secondary-button" onClick={downloadExport} busy={busy && pendingAction === "export"} disabled={busy} loadingLabel="Preparing export…">Download my data</LoadingButton></div></section>
     </div>
     <section className="delete-account-section"><h2>Delete account</h2><p>This permanently removes your Budgetly account and its associated records. Enter your password and type DELETE to continue.</p>
+      <div className="deletion-guidance" role="note" aria-labelledby="google-deletion-title">
+        <h3 id="google-deletion-title">Use Google without a Budgetly password?</h3>
+        <ol>
+          <li>Request a <button type="button" className="inline-link" onClick={() => navigate("/forgot-password")}>password reset</button> using the email shown in Personal details.</li>
+          <li>Follow the email link to set a Budgetly password. This does not change your Google password.</li>
+          <li>Return to Sign in, continue with Google, then open Settings. Enter your new Budgetly password and type DELETE to confirm deletion.</li>
+        </ol>
+        <p>If you can’t complete these steps, contact <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a> to request help with account deletion. Don’t send your password, reset link, verification codes or financial records.</p>
+      </div>
       <form className="settings-form" onSubmit={deleteAccount} onInvalid={event => invalid(event, "deleteAccount")}>
         {feedback("deleteAccount")}
         <PasswordInput label="Password" name="password" value={deleteForm.password} error={fieldError("deleteAccount", "password")} onChange={value => { setDeleteForm({ ...deleteForm, password: value });clear("deleteAccount", "password"); }} />

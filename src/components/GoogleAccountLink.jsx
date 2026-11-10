@@ -4,6 +4,7 @@ import { InlineLoading } from "./Loading";
 import GoogleIdentityButton from "./GoogleIdentityButton";
 import { linkGoogleIdentity } from "../lib/googleAuth";
 import { friendlyErrorMessage, focusFormError } from "../lib/errors";
+import { profileDisplayName } from "../lib/profile";
 
 export default function GoogleAccountLink({ profile, theme, busy: parentBusy, logoutBusy, onBusyChange }) {
   const panel = useRef(null), current = useRef(false), request = useRef(null), lock = useRef(false);
@@ -31,7 +32,7 @@ export default function GoogleAccountLink({ profile, theme, busy: parentBusy, lo
   }
   return <section ref={panel} id="google-connection" className="google-link-panel google-action-panel" tabIndex={-1} aria-labelledby="google-connection-title">
     <div className="google-action-heading"><h3 id="google-connection-title">Connect Google</h3><p>Linking is always your explicit choice.</p></div>
-    <p className="google-account-caption"><span>Your Budgetly account</span><strong>{profile?.email || profile?.username}</strong></p>
+    <p className="google-account-caption"><span>Your Budgetly account</span><strong>{profile?.email || profileDisplayName(profile)}</strong></p>
     <ErrorNotice message={error} />
     {notice && <p className="form-message form-message-success" role="status">{notice}</p>}
     {busy && <InlineLoading>Confirming your Google connection…</InlineLoading>}

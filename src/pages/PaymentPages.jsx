@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, CircleAlert, Clock3, HandCoins, LockKeyhole, Moon, RefreshCw, Sun, Target, Wallet } from "lucide-react";
 import BrandMark from "../components/BrandMark";
 import { InlineLoading, LoadingButton } from "../components/Loading";
+import PaymentSupport from "../components/PaymentSupport";
 import { getAccessStatus, getPurchase, initializeLifetimePurchase, verifyPurchase } from "../lib/billingApi";
 import { friendlyErrorMessage } from "../lib/errors";
 import { clearPendingPurchaseReference, hasLifetimeAccess, INACTIVE_ENTITLEMENTS, LIFETIME_PRICE_LABEL, paymentReturnReference, pendingPurchaseReference, rememberPurchaseReference, TERMINAL_PURCHASE_STATUSES } from "../lib/billingState.js";
@@ -21,7 +22,7 @@ function BillingFrame({ children, navigate, theme, onThemeChange, compact = fals
   return <div className={`orbit-billing orbit-public billing-shell ${compact ? "billing-compact" : ""}`}>
     <a className="billing-skip" href="#billing-content">Skip to payment</a>
     <header className="billing-header"><AppLink to="/welcome" navigate={navigate} className="billing-brand" aria-label="Budgetly homepage"><BrandMark size={31} /><span>budgetly<span>.</span></span></AppLink><div className="billing-header-actions"><AppLink to="/welcome" navigate={navigate}><ArrowLeft size={15} />Budgetly home</AppLink>{onThemeChange && <button type="button" onClick={() => onThemeChange(theme === "dark" ? "light" : "dark")} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>}</div></header>
-    <main id="billing-content" className="billing-content" tabIndex={-1} aria-labelledby="billing-title">{children}</main>
+    <main id="billing-content" className="billing-content" tabIndex={-1} aria-labelledby="billing-title">{children}<PaymentSupport /></main>
     <footer className="billing-page-footer"><span>Your money, in one calmer place.</span><nav aria-label="Payment and account links"><AppLink to="/privacy-policy" navigate={navigate}>Privacy Policy</AppLink><AppLink to="/terms-of-service" navigate={navigate}>Terms of Service</AppLink><AppLink to="/help" navigate={navigate}>Help</AppLink><AppLink to="/settings" navigate={navigate}>Account settings</AppLink></nav></footer>
   </div>;
 }

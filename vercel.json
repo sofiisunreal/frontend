@@ -1,4 +1,22 @@
 {
+  "headers": [
+    {
+      "source": "/(login|register|forgot-password|logout|transactions|accounts|transfers|budgets|savings|loans|categories|exchange-rates|settings|help|legal-updates|payment-required|payment/complete){/}?",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/(reset-password(?:/.*)?)",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/robots.txt",
+      "headers": [{ "key": "Content-Type", "value": "text/plain; charset=utf-8" }]
+    },
+    {
+      "source": "/sitemap.xml",
+      "headers": [{ "key": "Content-Type", "value": "application/xml; charset=utf-8" }]
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

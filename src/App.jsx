@@ -28,6 +28,13 @@ const routeScreens = {
 };
 const routePaths = Object.fromEntries(Object.entries(routeScreens).map(([path, screen]) => [screen, path]));
 const authRoutes = new Set(["/login", "/register", "/forgot-password"]);
+const canonicalOrigin = "https://www.budgetlyke.com";
+const canonicalPaths = new Map([
+  ["/", "/"],
+  ["/welcome", "/"],
+  ["/privacy-policy", "/privacy-policy"],
+  ["/terms-of-service", "/terms-of-service"],
+]);
 const currentPath = () => `${window.location.pathname}${window.location.search}`;
 const paymentEnforcementEnabled = import.meta.env.VITE_ENFORCE_LIFETIME_ACCESS === "true";
 
@@ -138,6 +145,29 @@ export default function App() {
   const isRecoveryPath = pathname === "/forgot-password" || pathname.startsWith("/reset-password/");
   const isPublicDocument = ["/privacy-policy", "/terms-of-service", "/legal-updates"].includes(pathname);
   const isLandingPath = pathname === "/welcome" || (pathname === "/" && sessionState !== "signed-in");
+  const signedInOverview = pathname === "/" && sessionState === "signed-in";
+  const canonicalPath = pathname === "/" && sessionState !== "signed-out"
+    ? undefined
+    : canonicalPaths.get(pathname);
+
+  useEffect(() => {
+    // Vercel serves the same HTML at / for the public landing and private overview.
+    if (signedInOverview) {
+      const robots = document.createElement("meta");
+      robots.name = "robots";
+      robots.content = "noindex, nofollow";
+      document.head.append(robots);
+      return () => robots.remove();
+    }
+    if (!canonicalPath) return;
+
+    const canonical = document.createElement("link");
+    canonical.rel = "canonical";
+    canonical.href = `${canonicalOrigin}${canonicalPath}`;
+    document.head.append(canonical);
+    return () => canonical.remove();
+  }, [canonicalPath, signedInOverview]);
+
   const isPaymentCompletePath = pathname === "/payment/complete";
   const isPaymentRequiredPath = pathname === "/payment-required";
   const accountManagement = pathname === "/settings" || pathname === "/help";

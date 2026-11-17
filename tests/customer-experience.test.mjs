@@ -28,6 +28,7 @@ const emailLink=html=>{
 };
 const contact=html=>{
  emailLink(html);
+ assert(html.includes(`Email <a href="${SUPPORT_MAILTO}">${SUPPORT_EMAIL}</a> for payment help`));
  assert.match(html,/payment or refund review/);assert.match(html,/does not guarantee a refund/);
  assert.match(html,/before paying again/);assert.match(html,/card or bank details/);
 };

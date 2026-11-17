@@ -1,6 +1,7 @@
 // Approved compositions transcribed from orbit-landing. All figures below are local illustrative records.
 import {useState} from "react";
 import LifetimeOfferNote from "../LifetimeOfferNote";
+import SupportContact from "../SupportContact";
 import {demo,money,balance,total,categories} from "./demoData";
 import {CurrencySwitch,SpendingRing} from "./LandingPreview";
 import {LandingIcon as Icon} from "./LandingArtwork";
@@ -69,6 +70,6 @@ export function LandingFooter({lightingControl}){const {documents}=usePolicies()
   <div className="closing-orbit" aria-hidden="true"><span></span><span></span></div>
   <div className="wrap">
     <div className="closing-invitation reveal"><p className="section-label">Your money, with a little perspective.</p><div className="closing-head"><h2>Start with what you have.<br />Plan what’s next.</h2><div><p>Create your account.<br />Then unlock your Budgetly workspace.</p><LifetimeOfferNote /><a className="btn btn--primary btn--xl" href="/register">Get started <svg><use href="#landing-arrow"/></svg></a><a className="closing-sign-in" href="/login">Already have an account? Sign in <svg><use href="#landing-arrow"/></svg></a></div></div></div>
-    <div className="footer-base"><a className="footer-wordmark" href="#top" aria-label="Budgetly home"><svg><use href="#landing-budgetly-mark"/></svg><span>budgetly<span className="brand-dot">.</span></span></a><div className="footer-links"><a href="#accounts">Accounts</a><a href="#spending">Spending</a><a href="#plans">Budgets & savings</a><a href="#loans">Loans & repayments</a><a href="/help">Help</a><a href="/login">Sign in</a></div><div className="footer-bottom"><span>© 2026 Budgetly</span><span>Product previews use illustrative data.</span>{lightingControl}<div><a href={policyLink("privacy",documents?.privacy)}>Privacy policy · {documents?.privacy ? `v${documents.privacy.version}` : "Draft"}</a><a href={policyLink("terms",documents?.terms)}>Terms · {documents?.terms ? `v${documents.terms.version}` : "Draft"}</a></div></div></div>
+    <div className="footer-base"><a className="footer-wordmark" href="#top" aria-label="Budgetly home"><svg><use href="#landing-budgetly-mark"/></svg><span>budgetly<span className="brand-dot">.</span></span></a><div className="footer-links"><a href="#accounts">Accounts</a><a href="#spending">Spending</a><a href="#plans">Budgets & savings</a><a href="#loans">Loans & repayments</a><a href="/help">Help</a><a href="/login">Sign in</a></div><SupportContact /><div className="footer-bottom"><span>© 2026 Budgetly</span><span>Product previews use illustrative data.</span>{lightingControl}<div><a href={policyLink("privacy",documents?.privacy)}>Privacy policy · {documents?.privacy ? `v${documents.privacy.version}` : "Draft"}</a><a href={policyLink("terms",documents?.terms)}>Terms · {documents?.terms ? `v${documents.terms.version}` : "Draft"}</a></div></div></div>
   </div>
 </footer>);}

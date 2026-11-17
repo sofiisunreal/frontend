@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { ArrowLeft, ArrowRight, FileText, Moon, Sun } from "lucide-react";
 import BrandMark from "../components/BrandMark";
+import SupportContact from "../components/SupportContact";
 import { InlineLoading } from "../components/Loading";
 import PolicyRecord from "../components/legal/PolicyRecord";
 import ConnectedLegalReview from "../components/legal/ConnectedLegalReview";
@@ -60,6 +61,7 @@ export default function LegalDraftPage({ path, navigate, theme, onThemeChange, e
         </article>
       </div>
       <footer className="legal-site-footer"><a href={embedded ? "/" : "/register"}><ArrowLeft size={15} />{embedded ? "Back to Overview" : "Back to create account"}</a><span>Budgetly · {record ? `Version ${record.version}` : "Working drafts for review"}</span></footer>
+      <SupportContact />
     </div>
   </Container>;
 }

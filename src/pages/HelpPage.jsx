@@ -5,6 +5,7 @@ import { api, asList, formErrorMessage, jsonBody } from "../lib/api";
 import { focusFormError, nativeValidationMessage, normalizeError } from "../lib/errors";
 import { ErrorNotice, FieldError } from "../components/FormFeedback";
 import { LIFETIME_PRICE_LABEL } from "../lib/billingState.js";
+import SupportContact from "../components/SupportContact";
 
 const topics = [
   { title: "Getting started", section: "Start here", keywords: "welcome first account category transaction payment lifetime price", copy: `Create your account and sign in, then unlock lifetime access for ${LIFETIME_PRICE_LABEL} once. Account creation does not include a purchase. After unlocking, add an account, create a personal category and record a transaction. The overview uses saved records from your Budgetly account; it does not add sample records.`, links: [{ label: "Check lifetime access", path: "/payment-required" }, { label: "Open the getting started guide", action: "onboarding" }, { label: "Add an account", path: "/accounts?new=1" }, { label: "Create a category", path: "/categories?new=1" }] },
@@ -146,6 +147,7 @@ export default function HelpPage({ navigate, onReopenOnboarding }) {
 
 <div className="my-feedback" aria-labelledby="my-feedback-title"><div className="section-heading"><div><h3 id="my-feedback-title">My feedback</h3><p>Only feedback submitted from your account is shown here.</p></div></div>{feedbackLoading ? <FeedbackLoading /> : feedbackLoadError ? <div><ErrorNotice message={feedbackLoadError} /><button type="button" className="secondary-button" onClick={() => { setFeedbackLoadError("");setFeedbackLoading(true);setFeedbackLoadAttempt(value => value + 1); }}>Try again</button></div> : feedbackItems.length ? <ul className="feedback-history">{feedbackItems.map((item) => <li key={item.id}><div><strong>{item.title}</strong><span>{item.category === "bug" ? "Bug report" : item.category === "feature" ? "Feature request" : "General feedback"} · {formatFeedbackDate(item.created_at)}</span></div><p>{item.description}</p></li>)}</ul> : <p className="muted-text">You haven’t sent feedback yet.</p>}</div>
     </section>
+    <footer className="help-contact-footer"><SupportContact /></footer>
   </div>;
 }
 

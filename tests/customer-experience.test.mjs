@@ -9,22 +9,25 @@ import {SUPPORT_EMAIL, SUPPORT_MAILTO} from '../src/lib/support.js';
 
 const user={id:900001,username:'google-internal-subject',email:'local@example.invalid',first_name:'Amina',last_name:'Wanjiru'};
 const noop=()=>{};
-let server,Sidebar,FinancePage,AuthPage,PaymentPages,PaymentSupport,LifetimeOfferNote,PolicyRecords,LegalPage;
+let server,Sidebar,FinancePage,AuthPage,PaymentPages,PaymentSupport,LifetimeOfferNote,PolicyRecords,LegalPage,LandingSections;
 const storage=Object.getOwnPropertyDescriptor(globalThis,'localStorage');
 test.before(async()=>{
  Object.defineProperty(globalThis,'localStorage',{configurable:true,value:{getItem:()=>null}});
  server=await createServer({server:{middlewareMode:true,hmr:false,watch:null},appType:'custom',logLevel:'silent'});
- [Sidebar,FinancePage,AuthPage,PaymentPages,PaymentSupport,LifetimeOfferNote,PolicyRecords,LegalPage]=await Promise.all([
+ [Sidebar,FinancePage,AuthPage,PaymentPages,PaymentSupport,LifetimeOfferNote,PolicyRecords,LegalPage,LandingSections]=await Promise.all([
   '/src/components/Sidebar.jsx','/src/pages/FinancePage.jsx','/src/pages/AuthPage.jsx','/src/pages/PaymentPages.jsx','/src/components/PaymentSupport.jsx',
   '/src/components/LifetimeOfferNote.jsx','/src/legal/policyRecords.js','/src/pages/LegalDraftPage.jsx',
+  '/src/components/landing/LandingSections.jsx',
  ].map(path=>server.ssrLoadModule(path)));
 });
 test.after(async()=>{await server?.close();if(storage)Object.defineProperty(globalThis,'localStorage',storage);else delete globalThis.localStorage;});
 const render=(component,props={})=>renderToStaticMarkup(createElement(component,props));
-const contact=html=>{
+const emailLink=html=>{
  const links=[...html.matchAll(/href="(mailto:[^"]*)"/g)].map(match=>match[1]);
- assert(links.length>0);assert(links.every(href=>href===SUPPORT_MAILTO));
- assert(!links.some(href=>/[?&]|local@|bgt_|secret/i.test(href)));
+ assert.deepEqual(links,[SUPPORT_MAILTO]);
+};
+const contact=html=>{
+ emailLink(html);
  assert.match(html,/payment or refund review/);assert.match(html,/does not guarantee a refund/);
  assert.match(html,/before paying again/);assert.match(html,/card or bank details/);
 };
@@ -70,17 +73,23 @@ test('Settings explains the Google reset-to-deletion process and keeps confirmat
  assert(/<input\b(?=[^>]*name="username")(?=[^>]*disabled="")[^>]*>/.test(html),'Username remains read-only');assert(html.includes(user.username));
 });
 test('support email is a plain public contact with no account or payment data prefilled',()=>{
- assert.equal(SUPPORT_EMAIL,'budgetly01@gmail.com');assert.equal(SUPPORT_MAILTO,'mailto:budgetly01@gmail.com');
+ assert.equal(SUPPORT_EMAIL,'support@budgetlyke.com');assert.equal(SUPPORT_MAILTO,'mailto:support@budgetlyke.com');
  contact(render(PaymentSupport.default));
 });
-test('signed-out login, forgot-password and reset-password screens expose payment support',()=>{
- for(const path of ['/login','/forgot-password','/reset-password/local-id/local-secret/']){
-  const html=render(AuthPage.default,{path,navigate:noop});contact(html);
+test('sign-in, registration and recovery offer one plain support email after the form',()=>{
+ for(const path of ['/login','/register','/forgot-password','/reset-password/local-id/local-secret/']){
+  const html=render(AuthPage.default,{path,navigate:noop});emailLink(html);
+  assert.match(html,/<\/form><footer[^>]*>[\s\S]*Need help\? Contact/);
   assert.match(html,/type="submit"/);
   if(path==='/login')assert.match(html,/KES 1,050/);
   if(path==='/forgot-password')assert.match(html,/type="email"/);
   if(path.startsWith('/reset-password'))assert.match(html,/name="confirm_password"/);
  }
+});
+
+test('landing footer and Help offer one current email link',()=>{
+ emailLink(render(LandingSections.LandingFooter));
+ emailLink(render(FinancePage.default,{screen:'Help',profile:user,navigate:noop}));
 });
 test('payment offer, unresolved access and signed-out completion all expose the same safe support path',()=>{
  const common={navigate:noop,profile:user};
@@ -116,6 +125,7 @@ test('checkout legal links resolve to current verified documents without hardcod
   for(const[type,path]of[['terms','/terms-of-service'],['privacy','/privacy-policy']]){
    const html=renderActive(LegalPage.default,{path,navigate:noop});
    assert(html.includes('Active official record'));assert(html.includes('qa-current-2'));assert(html.includes(raw[type].content));assert(!html.includes('Awaiting first publication.'));
+   emailLink(html);
   }
  }finally{if(previous)Object.defineProperty(globalThis,'window',previous);else delete globalThis.window;}
 });
